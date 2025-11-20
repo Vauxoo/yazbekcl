@@ -1,0 +1,4 @@
+[submodule "yazbekcl"]
+	path = yazbekcl
+	url = git@git.vauxoo.com:vauxoo/yazbekcl.git
+	branch = 19.0
