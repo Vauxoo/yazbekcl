@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="payment_b2b_credit" inherit_id="website_sale.payment" name="B2B Credit at Checkout">
+        <xpath expr="//div[@id='payment_method']" position="after">
+            <t t-if="b2b_credit and not errors">
+                <div class="card border-primary mt-3" id="b2b_credit_payment_method">
+                    <div class="card-body">
+                        <h5 class="card-title mb-2">Crédito comercial</h5>
+                        <p class="mb-1">
+                            Disponible:
+                            <span t-out="b2b_credit['available']"
+                                  t-options="{'widget': 'monetary', 'display_currency': website_sale_order.company_id.currency_id}"/>
+                        </p>
+                        <p class="small text-muted mb-3">
+                            El total incluye IVA y envío. No se registrará un pago al confirmar.
+                        </p>
+                        <t t-if="b2b_credit_error">
+                            <div class="alert alert-danger" role="alert" t-out="b2b_credit_error"/>
+                        </t>
+                        <form action="/shop/credit/confirm" method="post" class="d-grid">
+                            <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                            <button type="submit" class="btn btn-primary"
+                                    t-att-disabled="not b2b_credit['can_confirm'] and 'disabled' or None">
+                                Confirmar pedido a crédito
+                            </button>
+                        </form>
+                        <p t-if="not b2b_credit['can_confirm']" class="text-danger small mb-0 mt-2">
+                            El crédito disponible no alcanza para el total actual del pedido.
+                        </p>
+                    </div>
+                </div>
+            </t>
+        </xpath>
+    </template>
+</odoo>

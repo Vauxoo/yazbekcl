@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_partner_view_form_b2b_credit" model="ir.ui.view">
+        <field name="name">res.partner.form.b2b.credit</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <group string="Crédito comercial eCommerce" groups="account.group_account_invoice">
+                    <field name="b2b_credit_authorized"/>
+                    <field name="credit_limit"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
