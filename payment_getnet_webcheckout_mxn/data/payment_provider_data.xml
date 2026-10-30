@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="payment_provider_getcheckout_mxn" model="payment.provider">
+        <field name="name">Get Checkout (MIT México)</field>
+        <field name="code">getcheckout_mxn</field>
+        <field name="module_id" ref="base.module_payment_getnet_webcheckout_mxn"/>
+        <field name="payment_method_ids" eval="[Command.link(ref('payment.payment_method_card'))]"/>
+    </record>
+    <record id="payment.payment_method_card" model="payment.method">
+        <field name="active">True</field>
+        <field name="provider_ids" eval="[Command.link(ref('payment_getnet_webcheckout_mxn.payment_provider_getcheckout_mxn'))]"/>
+    </record>
+</odoo>
