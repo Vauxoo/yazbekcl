@@ -62,6 +62,13 @@ class PaymentProvider(models.Model):
             return ['bank_transfer']
         return super()._get_default_payment_method_codes()
 
+    def _get_redirect_form_view(self, is_validation=False):
+        """Always provide Openpay's transition form, including for providers created by old data."""
+        self.ensure_one()
+        if self.code != 'openpay_mxn':
+            return super()._get_redirect_form_view(is_validation=is_validation)
+        return self.env.ref('payment_openpay_mxn.openpay_mxn_redirect_form')
+
     def _build_request_url(self, endpoint, **kwargs):
         if self.code != 'openpay_mxn':
             return super()._build_request_url(endpoint, **kwargs)

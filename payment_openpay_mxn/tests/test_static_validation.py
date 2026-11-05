@@ -49,6 +49,8 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn("'/payment/openpay_mxn/process'", controller)
         self.assertIn("request.redirect('/payment/status')", controller)
         self.assertIn('redirect_form_view_id', binding)
+        provider = (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8')
+        self.assertIn("payment_openpay_mxn.openpay_mxn_redirect_form", provider)
 
     def test_no_credentials_embedded(self):
         contents = '\n'.join(

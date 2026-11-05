@@ -60,6 +60,8 @@ interno de Odoo antes de guardarse.
 Al generar la referencia, Odoo redirige al comprador a su página de estado y muestra allí CLABE,
 convenio, referencia y el enlace al recibo Openpay. Este paso usa un formulario de transición
 interno, requerido por el flujo `redirect` de Odoo 19.
+La vista se obtiene también por código, para mantener compatibilidad con proveedores configurados
+antes de que se agregara el formulario de transición.
 
 ## Validación previa a producción
 
