@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="redirect_form" name="Get Checkout redirect form">
+        <!-- MIT creates an opaque, single-use payment URL. Credentials never reach the browser. -->
+        <form t-att-action="checkout_url" method="get"/>
+    </template>
+</odoo>
