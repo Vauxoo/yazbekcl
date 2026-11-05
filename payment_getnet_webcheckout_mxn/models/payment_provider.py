@@ -58,6 +58,27 @@ class PaymentProvider(models.Model):
             if provider.state == 'enabled' and not provider.getcheckout_production_url:
                 raise ValidationError(_('MIT debe proporcionarte la URL de producción antes de activar el proveedor.'))
 
+    def write(self, vals):
+        """Activate Card only after this provider is usable.
+
+        Odoo 19 rejects activating a payment method unless an attached provider
+        is already in test or enabled state.  At XML installation time this
+        provider must remain disabled because its merchant credentials are not
+        known yet, so activating Card is intentionally deferred to this point.
+        """
+        result = super().write(vals)
+        if vals.get('state') in ('test', 'enabled'):
+            getcheckout_providers = self.filtered(
+                lambda provider: provider.code == const.PROVIDER_CODE
+                and provider.state in ('test', 'enabled')
+            )
+            card_methods = getcheckout_providers.payment_method_ids.filtered(
+                lambda method: method.code == 'card' and not method.active
+            )
+            if card_methods:
+                card_methods.write({'active': True})
+        return result
+
     def _compute_feature_support_fields(self):
         super()._compute_feature_support_fields()
         self.filtered(lambda provider: provider.code == const.PROVIDER_CODE).update({
