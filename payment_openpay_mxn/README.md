@@ -23,7 +23,10 @@ al administrador de Odoo y el addon no incluye valores de ejemplo que parezcan s
 
 * Sandbox: `https://sandbox-api.openpay.mx`; producción: `https://api.openpay.mx`.
 * Odoo crea `POST /v1/{MERCHANT_ID}/charges` con `method=bank_account`, monto MXN,
-  descripción y referencia de pedido.
+  descripción `Pedido {referencia}`, referencia de pedido y fecha límite configurable por el
+  administrador (de 1 a 30 días) a las 23:59:59 de Ciudad de México. Envía `customer` con nombre completo, apellido en blanco y
+  correo del comprador. Aunque Openpay documenta `customer` como opcional para este método,
+  algunas cuentas lo requieren; por ello Odoo exige correo electrónico al comprador.
 * El webhook es `https://SU-DOMINIO/payment/openpay_mxn/webhook`. Regístrelo en el
   dashboard de Openpay con HTTPS/TLS válido y el mismo usuario/contraseña HTTP Basic
   configurados en Odoo. Suscriba `verification`, `charge.created`, `charge.succeeded`,
@@ -58,6 +61,15 @@ referencia no equivale a recibir el dinero.
    coinciden.
 5. Solicite a Openpay la habilitación de producción y cambie únicamente las credenciales
    dentro de Odoo.
+
+Use **Modo de prueba** únicamente con Merchant ID y llave privada de sandbox. **Activado**
+consulta producción y requiere las credenciales de producción, emitidas tras la aprobación de
+Openpay; usar las de sandbox allí genera el error `401 / 1002`.
+
+En la pestaña **Configuración** del proveedor se muestran también los enlaces oficiales:
+
+* Pruebas: API `https://sandbox-api.openpay.mx` y panel `https://sandbox-dashboard.openpay.mx`.
+* Producción: API `https://api.openpay.mx` y panel `https://dashboard.openpay.mx`.
 
 ## Límites de la entrega
 

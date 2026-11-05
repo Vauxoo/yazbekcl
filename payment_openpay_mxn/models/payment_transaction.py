@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from odoo import _, fields, models
 from odoo.exceptions import ValidationError
 
@@ -18,15 +21,20 @@ class PaymentTransaction(models.Model):
         self.ensure_one()
         if self.currency_id.name != 'MXN':
             raise ValidationError(_('Openpay SPEI/CIE solo admite pagos en MXN.'))
+        payload = {
+            'method': 'bank_account',
+            'amount': self.amount,
+            'currency': self.currency_id.name,
+            'description': f'Pedido {self.reference}'[:250],
+            'order_id': self.reference[:100],
+            'due_date': self._openpay_mxn_get_due_date(),
+            # The bank-charge documentation describes customer as optional, but Openpay accounts
+            # can require it. Sending it on merchant-level charges is supported and avoids 400/1001.
+            'customer': self._openpay_mxn_prepare_customer_data(),
+        }
         try:
             charge_data = self._send_api_request(
-                'POST', 'charges', json={
-                    'method': 'bank_account',
-                    'amount': self.amount,
-                    'currency': 'MXN',
-                    'description': self.reference[:250],
-                    'order_id': self.reference[:100],
-                }
+                'POST', 'charges', json=payload
             )
         except ValidationError as error:
             self._set_error(str(error))
@@ -37,6 +45,32 @@ class PaymentTransaction(models.Model):
             'openpay_mxn_reference': self.openpay_mxn_reference,
             'openpay_mxn_receipt_url': self.openpay_mxn_receipt_url,
         }
+
+    def _openpay_mxn_prepare_customer_data(self):
+        """Prepare the inline customer accepted by Openpay's merchant charge endpoint."""
+        self.ensure_one()
+        if not self.partner_email:
+            raise ValidationError(_(
+                'Openpay requiere un correo electrónico para generar la referencia bancaria.'
+            ))
+        customer = {
+            'name': (self.partner_name or _('Customer'))[:100],
+            # Openpay accepts the last name as optional. Preserve the agreed request shape.
+            'last_name': ' ',
+            'email': self.partner_email[:100],
+        }
+        return customer
+
+    def _openpay_mxn_get_due_date(self):
+        """Return the administrator-configured local deadline in Openpay's ISO form."""
+        self.ensure_one()
+        mexico_now = datetime.now(ZoneInfo('America/Mexico_City'))
+        due_date = (mexico_now + timedelta(
+            days=self.provider_id.openpay_mxn_expiration_days
+        )).replace(
+            hour=23, minute=59, second=59, microsecond=0
+        )
+        return due_date.isoformat()
 
     def _openpay_mxn_refresh_status(self):
         self.ensure_one()
