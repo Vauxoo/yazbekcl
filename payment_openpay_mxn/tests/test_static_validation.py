@@ -1,0 +1,44 @@
+"""Portable validation; run with `python -m unittest discover -s tests -p test_static_validation.py`."""
+import ast
+import pathlib
+import unittest
+import xml.etree.ElementTree as ET
+
+
+MODULE = pathlib.Path(__file__).resolve().parents[1]
+
+
+class TestStaticValidation(unittest.TestCase):
+    def test_python_files_parse(self):
+        for path in MODULE.rglob('*.py'):
+            ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+
+    def test_xml_files_parse(self):
+        for path in MODULE.rglob('*.xml'):
+            ET.parse(path)
+
+    def test_scope_is_bank_transfer_only(self):
+        source = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn("'method': 'bank_account'", source)
+        self.assertIn("['bank_transfer']", (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8'))
+        self.assertNotIn("'method': 'card'", source)
+
+    def test_no_credentials_embedded(self):
+        contents = '\n'.join(
+            path.read_text(encoding='utf-8')
+            for path in MODULE.rglob('*')
+            if path.is_file() and path.suffix in {'.py', '.xml', '.md'}
+        )
+        self.assertNotRegex(contents, r'(?i)sk_[0-9a-f]{20,}')
+
+    def test_manifest_declares_author_and_avoids_unsupported_field_parameter(self):
+        manifest = (MODULE / '__manifest__.py').read_text(encoding='utf-8')
+        self.assertIn("'author':", manifest)
+        source = '\n'.join(
+            path.read_text(encoding='utf-8') for path in (MODULE / 'models').glob('*.py')
+        )
+        self.assertNotIn('password=True', source)
+
+
+if __name__ == '__main__':
+    unittest.main()
