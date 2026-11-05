@@ -71,6 +71,10 @@ class OpenpayMXNController(http.Controller):
         if not tx:
             raise NotFound()
         tx._openpay_mxn_refresh_status()
+        # The notification can arrive after the buyer left the status page. Run the same Odoo
+        # post-processing normally triggered by the browser so the quotation, payment and invoice
+        # are finalized immediately. It is idempotent through ``is_post_processed``.
+        tx._openpay_mxn_post_process_done_transaction()
         return request.make_json_response({'status': 'ok'})
 
     @staticmethod

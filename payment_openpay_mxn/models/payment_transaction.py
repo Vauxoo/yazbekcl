@@ -91,6 +91,23 @@ class PaymentTransaction(models.Model):
         charge_data['reference'] = self.reference
         self._process('openpay_mxn', charge_data)
 
+    def _openpay_mxn_post_process_done_transaction(self):
+        """Finalize a confirmed charge using Odoo's standard business flow.
+
+        The webhook runs without the buyer's browser session, so the usual
+        ``/payment/status/poll`` endpoint is never called.  Odoo's post-processing is the
+        supported place where the Sales and Accounting extensions confirm the linked quotation,
+        create/post the customer payment, and reconcile any linked invoice.  The flag is reset by
+        Odoo when a transaction changes state, making this safe for a retried Openpay webhook.
+        """
+        self.ensure_one()
+        if (
+            self.provider_code == 'openpay_mxn'
+            and self.state == 'done'
+            and not self.is_post_processed
+        ):
+            self.with_company(self.company_id)._post_process()
+
     def _extract_amount_data(self, payment_data):
         """Supply Odoo's mandatory amount data for Openpay bank-charge responses.
 

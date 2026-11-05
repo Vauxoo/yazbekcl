@@ -51,6 +51,12 @@ pendiente.
 El pedido debe mantenerse pendiente hasta que Openpay confirme `completed`. Generar una
 referencia no equivale a recibir el dinero.
 
+Al recibir un webhook autenticado cuyo cargo ya está en estado `completed`, el addon ejecuta de
+inmediato el posprocesamiento estándar de Odoo: confirma la cotización vinculada y, con
+Contabilidad instalada, crea y contabiliza el pago del cliente en el diario del proveedor. Si hay
+una factura vinculada, Odoo también la contabiliza y reconcilia el pago. La operación es
+idempotente: un reintento del webhook no crea un segundo pedido ni un segundo pago.
+
 La respuesta inicial de algunas cuentas Openpay omite `amount` y `currency`. El addon conserva
 para esa respuesta el importe y la moneda inmutables de la transacción Odoo; al consultar el
 estado posteriormente, valida los valores devueltos por Openpay antes de confirmar el pago.
@@ -58,8 +64,10 @@ La fecha `due_date` devuelta por Openpay se convierte de ISO 8601 con zona horar
 interno de Odoo antes de guardarse.
 
 Al generar la referencia, Odoo redirige al comprador a su página de estado y muestra allí CLABE,
-convenio, referencia y el enlace al recibo Openpay. Este paso usa un formulario de transición
-interno, requerido por el flujo `redirect` de Odoo 19.
+convenio, referencia y el enlace al recibo Openpay en una tarjeta de instrucciones. El enlace
+estándar **Omitir** se sustituye por el botón **Continuar** únicamente para Openpay; lleva a la
+misma ruta estándar de Odoo y no confirma ni cancela el pedido. Este paso usa un formulario de
+transición interno, requerido por el flujo `redirect` de Odoo 19.
 La vista se obtiene también por código, para mantener compatibilidad con proveedores configurados
 antes de que se agregara el formulario de transición.
 

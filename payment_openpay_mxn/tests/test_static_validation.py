@@ -52,6 +52,14 @@ class TestStaticValidation(unittest.TestCase):
         provider = (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8')
         self.assertIn("payment_openpay_mxn.openpay_mxn_redirect_form", provider)
 
+    def test_payment_status_uses_openpay_specific_continue_action_and_layout(self):
+        template = (MODULE / 'views' / 'payment_openpay_mxn_templates.xml').read_text(encoding='utf-8')
+        self.assertIn('Continuar <i class="oi oi-arrow-right ms-1 small"/>', template)
+        self.assertIn("inherit_id=\"payment.payment_status\"", template)
+        self.assertIn('Datos listos para transferir', template)
+        self.assertIn('Confirmaremos tu pedido automáticamente', template)
+        self.assertIn('font-monospace text-break', template)
+
     def test_no_credentials_embedded(self):
         contents = '\n'.join(
             path.read_text(encoding='utf-8')
@@ -73,6 +81,14 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn("payload.get('transaction')", source)
         self.assertIn("payload.get('verification_code')", source)
         self.assertIn("openpay_mxn_verification_code", source)
+
+    def test_completed_webhook_uses_odoo_post_processing(self):
+        controller = (MODULE / 'controllers' / 'main.py').read_text(encoding='utf-8')
+        transaction = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn('tx._openpay_mxn_post_process_done_transaction()', controller)
+        self.assertIn("self.state == 'done'", transaction)
+        self.assertIn('not self.is_post_processed', transaction)
+        self.assertIn('self.with_company(self.company_id)._post_process()', transaction)
 
     def test_provider_binds_bank_transfer_without_activating_it_in_xml(self):
         binding = (MODULE / 'data' / 'payment_method_binding.xml').read_text(encoding='utf-8')
