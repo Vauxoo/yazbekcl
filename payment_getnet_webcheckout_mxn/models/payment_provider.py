@@ -19,10 +19,10 @@ class PaymentProvider(models.Model):
     getcheckout_branch_id = fields.Char(string='ID de sucursal MIT', groups='base.group_system')
     getcheckout_user = fields.Char(string='Usuario de integraciones MIT', groups='base.group_system')
     getcheckout_password = fields.Char(
-        string='Contraseña de integraciones MIT', groups='base.group_system', password=True,
+        string='Contraseña de integraciones MIT', groups='base.group_system',
     )
-    getcheckout_data0 = fields.Char(string='Data0 MIT', groups='base.group_system', password=True)
-    getcheckout_aes_key = fields.Char(string='Llave AES MIT', groups='base.group_system', password=True)
+    getcheckout_data0 = fields.Char(string='Data0 MIT', groups='base.group_system')
+    getcheckout_aes_key = fields.Char(string='Llave AES MIT', groups='base.group_system')
     getcheckout_qa_url = fields.Char(
         string='URL de QA', default=const.QA_API_URL, groups='base.group_system', required_if_provider=const.PROVIDER_CODE,
     )

@@ -1,6 +1,7 @@
 {
     'name': 'Get Checkout (MIT México)',
-    'version': '19.0.1.0.1',
+    'version': '19.0.1.0.2',
+    'author': 'Yazbek',
     'category': 'Accounting/Payment Providers',
     'summary': 'Get Checkout / MIT encrypted payment-link provider for Mexico',
     'description': """Hosted payment provider for Get Checkout (MIT México).
