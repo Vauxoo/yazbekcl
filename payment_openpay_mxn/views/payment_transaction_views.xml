@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="payment_transaction_form_openpay_mxn" model="ir.ui.view">
+        <field name="name">payment.transaction.form.openpay.mxn</field>
+        <field name="model">payment.transaction</field>
+        <field name="inherit_id" ref="payment.payment_transaction_form"/>
+        <field name="arch" type="xml">
+            <group name="transaction_details" position="after">
+                <group string="Openpay SPEI/CIE" invisible="provider_code != 'openpay_mxn'">
+                    <field name="openpay_mxn_bank"/>
+                    <field name="openpay_mxn_clabe"/>
+                    <field name="openpay_mxn_agreement"/>
+                    <field name="openpay_mxn_reference"/>
+                    <field name="openpay_mxn_due_date"/>
+                    <field name="openpay_mxn_receipt_url" widget="url"/>
+                </group>
+            </group>
+        </field>
+    </record>
+</odoo>
