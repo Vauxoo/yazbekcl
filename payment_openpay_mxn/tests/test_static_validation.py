@@ -39,6 +39,12 @@ class TestStaticValidation(unittest.TestCase):
         )
         self.assertNotIn('password=True', source)
 
+    def test_webhook_uses_nested_transaction_and_retains_verification_code(self):
+        source = (MODULE / 'controllers' / 'main.py').read_text(encoding='utf-8')
+        self.assertIn("payload.get('transaction')", source)
+        self.assertIn("payload.get('verification_code')", source)
+        self.assertIn("openpay_mxn_verification_code", source)
+
 
 if __name__ == '__main__':
     unittest.main()
