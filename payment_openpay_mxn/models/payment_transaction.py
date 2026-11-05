@@ -1,8 +1,12 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from odoo import _, fields, models
 from odoo.exceptions import ValidationError
+
+
+_logger = logging.getLogger(__name__)
 
 
 class PaymentTransaction(models.Model):
@@ -177,3 +181,26 @@ class PaymentTransaction(models.Model):
         ])
         for transaction in pending_transactions:
             transaction._openpay_mxn_refresh_status()
+            self._openpay_mxn_try_post_process(transaction)
+
+        # A development database can receive the Openpay event while its HTTP worker is restarting,
+        # or the status can be updated by the refresh above. Catch up every confirmed charge that
+        # has not yet gone through Sales and Accounting post-processing.
+        done_transactions = self.search([
+            ('provider_code', '=', 'openpay_mxn'),
+            ('state', '=', 'done'),
+            ('is_post_processed', '=', False),
+        ])
+        for transaction in done_transactions:
+            self._openpay_mxn_try_post_process(transaction)
+
+    def _openpay_mxn_try_post_process(self, transaction):
+        """Post-process one transaction without preventing later Openpay charges from retrying."""
+        try:
+            with self.env.cr.savepoint():
+                transaction._openpay_mxn_post_process_done_transaction()
+        except Exception:
+            _logger.exception(
+                'Unable to post-process confirmed Openpay transaction %s; it will be retried.',
+                transaction.reference,
+            )

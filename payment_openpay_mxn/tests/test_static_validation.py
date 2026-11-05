@@ -90,6 +90,13 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn('not self.is_post_processed', transaction)
         self.assertIn('self.with_company(self.company_id)._post_process()', transaction)
 
+    def test_openpay_refresh_cron_catches_up_confirmed_transactions(self):
+        transaction = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn("('is_post_processed', '=', False)", transaction)
+        self.assertIn('self._openpay_mxn_try_post_process(transaction)', transaction)
+        self.assertIn('with self.env.cr.savepoint():', transaction)
+        self.assertIn('it will be retried.', transaction)
+
     def test_provider_binds_bank_transfer_without_activating_it_in_xml(self):
         binding = (MODULE / 'data' / 'payment_method_binding.xml').read_text(encoding='utf-8')
         self.assertIn("payment.payment_method_bank_transfer", binding)
