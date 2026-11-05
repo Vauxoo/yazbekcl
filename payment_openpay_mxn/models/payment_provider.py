@@ -19,6 +19,11 @@ class PaymentProvider(models.Model):
     openpay_mxn_webhook_password = fields.Char(
         string='Openpay Webhook Password', copy=False, groups='base.group_system'
     )
+    openpay_mxn_verification_code = fields.Char(
+        string='Openpay Webhook Verification Code', readonly=True, copy=False,
+        groups='base.group_system',
+        help='Último código recibido durante la verificación del webhook en Openpay.',
+    )
 
     def _get_supported_currencies(self):
         currencies = super()._get_supported_currencies()

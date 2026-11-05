@@ -11,6 +11,7 @@
                     <field name="openpay_mxn_private_key" password="True"/>
                     <field name="openpay_mxn_webhook_user"/>
                     <field name="openpay_mxn_webhook_password" password="True"/>
+                    <field name="openpay_mxn_verification_code"/>
                     <div class="text-muted" colspan="2">
                         Webhook: /payment/openpay_mxn/webhook (HTTPS y HTTP Basic).
                     </div>

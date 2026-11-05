@@ -24,8 +24,10 @@ al administrador de Odoo y el addon no incluye valores de ejemplo que parezcan s
   descripción y referencia de pedido.
 * El webhook es `https://SU-DOMINIO/payment/openpay_mxn/webhook`. Regístrelo en el
   dashboard de Openpay con HTTPS/TLS válido y el mismo usuario/contraseña HTTP Basic
-  configurados en Odoo. Suscriba al menos `charge.succeeded`, `charge.failed` y
-  `charge.cancelled`.
+  configurados en Odoo. Suscriba `verification`, `charge.created`, `charge.succeeded`,
+  `charge.failed`, `charge.cancelled` y, si está disponible para su cuenta, `spei.received`.
+  El código recibido durante `verification` queda visible en el proveedor, solo para
+  administradores, y también se conserva por proveedor en Parámetros del sistema.
 * El webhook no confía en el estado recibido: localiza la transacción y consulta el cargo
   a Openpay antes de cambiar el estado. La tarea programada también revisa pendientes
   cada 10 minutos.
