@@ -56,6 +56,9 @@ inmediato el posprocesamiento estándar de Odoo: confirma la cotización vincula
 Contabilidad instalada, crea y contabiliza el pago del cliente en el diario del proveedor. Si hay
 una factura vinculada, Odoo también la contabiliza y reconcilia el pago. La operación es
 idempotente: un reintento del webhook no crea un segundo pedido ni un segundo pago.
+El addon valida antes que el diario tenga la línea de pago entrante vinculada a Openpay y la crea
+con el método electrónico del proveedor cuando falte; esto evita el error `422` de Odoo al crear
+el pago.
 Como respaldo, la tarea Openpay de diez minutos también procesa cualquier transacción confirmada
 que hubiera quedado pendiente de ese paso, por ejemplo tras un reinicio del trabajador HTTP.
 
@@ -85,6 +88,8 @@ antes de que se agregara el formulario de transición.
    dentro de Odoo.
 6. Compruebe que un cargo confirmado deja la transacción con `is_post_processed=True`, el pedido
    en estado **Pedido de venta** y un pago de cliente vinculado.
+7. En el diario de pago, compruebe en **Pagos entrantes** que aparece la línea Openpay México -
+   SPEI/CIE después de procesar el primer cargo confirmado.
 
 Use **Modo de prueba** únicamente con Merchant ID y llave privada de sandbox. **Activado**
 consulta producción y requiere las credenciales de producción, emitidas tras la aprobación de

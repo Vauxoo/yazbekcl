@@ -97,6 +97,15 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn('with self.env.cr.savepoint():', transaction)
         self.assertIn('it will be retried.', transaction)
 
+    def test_confirmed_charge_ensures_its_accounting_payment_method_line(self):
+        provider = (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8')
+        transaction = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn('def _openpay_mxn_ensure_accounting_payment_method(self):', provider)
+        self.assertIn("self._setup_payment_method('openpay_mxn')", provider)
+        self.assertIn('self._ensure_payment_method_line()', provider)
+        self.assertIn('inbound_payment_method_line_ids', provider)
+        self.assertIn('self.provider_id._openpay_mxn_ensure_accounting_payment_method()', transaction)
+
     def test_provider_binds_bank_transfer_without_activating_it_in_xml(self):
         binding = (MODULE / 'data' / 'payment_method_binding.xml').read_text(encoding='utf-8')
         self.assertIn("payment.payment_method_bank_transfer", binding)

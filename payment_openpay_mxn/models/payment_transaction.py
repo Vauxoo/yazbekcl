@@ -110,6 +110,7 @@ class PaymentTransaction(models.Model):
             and self.state == 'done'
             and not self.is_post_processed
         ):
+            self.provider_id._openpay_mxn_ensure_accounting_payment_method()
             self.with_company(self.company_id)._post_process()
 
     def _extract_amount_data(self, payment_data):
