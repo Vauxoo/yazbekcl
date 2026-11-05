@@ -24,6 +24,11 @@ class PaymentProvider(models.Model):
         groups='base.group_system',
         help='Último código recibido durante la verificación del webhook en Openpay.',
     )
+    openpay_mxn_expiration_days = fields.Integer(
+        string='Días de vigencia de la referencia', default=7, required=True,
+        groups='base.group_system',
+        help='Días naturales antes del vencimiento de la referencia SPEI/CIE (de 1 a 30).',
+    )
 
     def _get_supported_currencies(self):
         currencies = super()._get_supported_currencies()
@@ -41,6 +46,14 @@ class PaymentProvider(models.Model):
             if not provider.openpay_mxn_webhook_user or not provider.openpay_mxn_webhook_password:
                 raise ValidationError(_(
                     'Configure el usuario y contraseña HTTP Basic del webhook antes de activar el proveedor.'
+                ))
+
+    @api.constrains('openpay_mxn_expiration_days')
+    def _check_openpay_mxn_expiration_days(self):
+        for provider in self.filtered(lambda p: p.code == 'openpay_mxn'):
+            if not 1 <= provider.openpay_mxn_expiration_days <= 30:
+                raise ValidationError(_(
+                    'Los días de vigencia de una referencia Openpay deben estar entre 1 y 30.'
                 ))
 
     def _get_default_payment_method_codes(self):

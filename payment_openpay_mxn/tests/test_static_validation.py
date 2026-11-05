@@ -20,6 +20,17 @@ class TestStaticValidation(unittest.TestCase):
     def test_scope_is_bank_transfer_only(self):
         source = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
         self.assertIn("'method': 'bank_account'", source)
+        self.assertIn("'customer': self._openpay_mxn_prepare_customer_data()", source)
+        self.assertIn("'email': self.partner_email[:100]", source)
+        self.assertIn("'due_date': self._openpay_mxn_get_due_date()", source)
+        self.assertIn("ZoneInfo('America/Mexico_City')", source)
+        self.assertIn('openpay_mxn_expiration_days', source)
+
+    def test_provider_config_exposes_expiration_and_official_environment_urls(self):
+        source = (MODULE / 'views' / 'payment_provider_views.xml').read_text(encoding='utf-8')
+        self.assertIn('openpay_mxn_expiration_days', source)
+        self.assertIn('https://sandbox-api.openpay.mx', source)
+        self.assertIn('https://api.openpay.mx', source)
         self.assertIn("['bank_transfer']", (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8'))
         self.assertNotIn("'method': 'card'", source)
 

@@ -17,6 +17,21 @@
                     </div>
                 </group>
             </group>
+            <group name="provider_config" position="inside">
+                <group name="openpay_mxn_configuration" string="Openpay SPEI/CIE" invisible="code != 'openpay_mxn'" groups="base.group_system">
+                    <field name="openpay_mxn_expiration_days"/>
+                    <div class="text-muted" colspan="2">
+                        El vencimiento se envía a Openpay a las 23:59:59 de Ciudad de México.
+                    </div>
+                    <div colspan="2">
+                        <strong>Ambientes oficiales de Openpay</strong>
+                        <ul class="mb-0">
+                            <li>Pruebas — API: <a href="https://sandbox-api.openpay.mx" target="_blank">sandbox-api.openpay.mx</a>; Panel: <a href="https://sandbox-dashboard.openpay.mx" target="_blank">sandbox-dashboard.openpay.mx</a></li>
+                            <li>Producción — API: <a href="https://api.openpay.mx" target="_blank">api.openpay.mx</a>; Panel: <a href="https://dashboard.openpay.mx" target="_blank">dashboard.openpay.mx</a></li>
+                        </ul>
+                    </div>
+                </group>
+            </group>
         </field>
     </record>
 </odoo>
