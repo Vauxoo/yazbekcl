@@ -25,6 +25,8 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn("'due_date': self._openpay_mxn_get_due_date()", source)
         self.assertIn("ZoneInfo('America/Mexico_City')", source)
         self.assertIn('openpay_mxn_expiration_days', source)
+        self.assertIn("'amount': payment_data.get('amount', self.amount)", source)
+        self.assertIn("'currency_code': payment_data.get('currency', self.currency_id.name)", source)
 
     def test_provider_config_exposes_expiration_and_official_environment_urls(self):
         source = (MODULE / 'views' / 'payment_provider_views.xml').read_text(encoding='utf-8')

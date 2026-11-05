@@ -51,6 +51,10 @@ pendiente.
 El pedido debe mantenerse pendiente hasta que Openpay confirme `completed`. Generar una
 referencia no equivale a recibir el dinero.
 
+La respuesta inicial de algunas cuentas Openpay omite `amount` y `currency`. El addon conserva
+para esa respuesta el importe y la moneda inmutables de la transacción Odoo; al consultar el
+estado posteriormente, valida los valores devueltos por Openpay antes de confirmar el pago.
+
 ## Validación previa a producción
 
 1. Pruebe una orden MXN real en sandbox y confirme que se genera `bank_account`.
