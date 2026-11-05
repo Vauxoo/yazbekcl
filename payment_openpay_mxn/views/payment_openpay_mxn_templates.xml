@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="openpay_mxn_state_header" inherit_id="payment.state_header">
+        <xpath expr="//div[@name='o_payment_status_alert']" position="inside">
+            <div class="card mt-3" t-if="tx and tx.provider_code == 'openpay_mxn' and tx.openpay_mxn_reference">
+                <div class="card-body">
+                    <h5 class="card-title">Datos para transferencia SPEI/CIE</h5>
+                    <p>Transfiere el monto exacto usando los siguientes datos.</p>
+                    <ul class="mb-2">
+                        <li>Banco destino: <strong t-esc="tx.openpay_mxn_bank"/></li>
+                        <li>CLABE: <strong t-esc="tx.openpay_mxn_clabe"/></li>
+                        <li>Convenio CIE: <strong t-esc="tx.openpay_mxn_agreement"/></li>
+                        <li>Referencia / concepto: <strong t-esc="tx.openpay_mxn_reference"/></li>
+                    </ul>
+                    <a t-if="tx.openpay_mxn_receipt_url" t-att-href="tx.openpay_mxn_receipt_url" target="_blank">Abrir recibo Openpay</a>
+                </div>
+            </div>
+        </xpath>
+    </template>
+</odoo>

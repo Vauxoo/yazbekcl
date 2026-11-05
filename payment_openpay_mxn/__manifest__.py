@@ -1,0 +1,19 @@
+{
+    'name': 'Openpay México - SPEI/CIE',
+    'version': '19.0.1.0.0',
+    'category': 'Accounting/Payment Providers',
+    'summary': 'Referencias de pago SPEI/CIE con Openpay México',
+    'description': 'Genera cargos bank_account de Openpay para pagos SPEI/CIE.',
+    'author': 'Configuración Odoo Chile',
+    'depends': ['payment', 'website_sale'],
+    'data': [
+        'data/payment_provider_data.xml',
+        'views/payment_provider_views.xml',
+        'views/payment_transaction_views.xml',
+        'views/payment_openpay_mxn_templates.xml',
+    ],
+    'demo': [],
+    'license': 'LGPL-3',
+    'installable': True,
+    'application': False,
+}
