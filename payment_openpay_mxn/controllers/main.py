@@ -3,12 +3,25 @@ from werkzeug.exceptions import Forbidden, NotFound
 
 from odoo import http
 from odoo.http import request
+from odoo.addons.payment.controllers.post_processing import PaymentPostProcessing
 
 
 class OpenpayMXNController(http.Controller):
     """Endpoints intentionally limited to Openpay bank-transfer notifications."""
 
     _webhook_url = '/payment/openpay_mxn/webhook'
+    _process_url = '/payment/openpay_mxn/process'
+
+    @http.route(_process_url, type='http', auth='public', methods=['POST'], csrf=False)
+    def openpay_mxn_process_transaction(self, reference=None, **post):
+        """Transition a just-created bank reference to Odoo's payment status screen."""
+        tx = request.env['payment.transaction'].sudo().browse(
+            request.session.get('__website_sale_last_tx_id')
+        ).exists()
+        if not tx or tx.provider_code != 'openpay_mxn' or tx.reference != reference:
+            raise NotFound()
+        PaymentPostProcessing.monitor_transaction(tx)
+        return request.redirect('/payment/status')
 
     @http.route(_webhook_url, type='http', auth='public', methods=['POST'], csrf=False)
     def openpay_mxn_webhook(self, **kwargs):
@@ -58,6 +71,10 @@ class OpenpayMXNController(http.Controller):
         if not tx:
             raise NotFound()
         tx._openpay_mxn_refresh_status()
+        # The notification can arrive after the buyer left the status page. Run the same Odoo
+        # post-processing normally triggered by the browser so the quotation, payment and invoice
+        # are finalized immediately. It is idempotent through ``is_post_processed``.
+        tx._openpay_mxn_post_process_done_transaction()
         return request.make_json_response({'status': 'ok'})
 
     @staticmethod

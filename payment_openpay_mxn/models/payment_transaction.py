@@ -1,8 +1,12 @@
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from odoo import _, fields, models
 from odoo.exceptions import ValidationError
+
+
+_logger = logging.getLogger(__name__)
 
 
 class PaymentTransaction(models.Model):
@@ -46,6 +50,14 @@ class PaymentTransaction(models.Model):
             'openpay_mxn_receipt_url': self.openpay_mxn_receipt_url,
         }
 
+    def _get_specific_rendering_values(self, processing_values):
+        if self.provider_code != 'openpay_mxn':
+            return super()._get_specific_rendering_values(processing_values)
+        return {
+            'api_url': '/payment/openpay_mxn/process',
+            'reference': self.reference,
+        }
+
     def _openpay_mxn_prepare_customer_data(self):
         """Prepare the inline customer accepted by Openpay's merchant charge endpoint."""
         self.ensure_one()
@@ -83,6 +95,24 @@ class PaymentTransaction(models.Model):
         charge_data['reference'] = self.reference
         self._process('openpay_mxn', charge_data)
 
+    def _openpay_mxn_post_process_done_transaction(self):
+        """Finalize a confirmed charge using Odoo's standard business flow.
+
+        The webhook runs without the buyer's browser session, so the usual
+        ``/payment/status/poll`` endpoint is never called.  Odoo's post-processing is the
+        supported place where the Sales and Accounting extensions confirm the linked quotation,
+        create/post the customer payment, and reconcile any linked invoice.  The flag is reset by
+        Odoo when a transaction changes state, making this safe for a retried Openpay webhook.
+        """
+        self.ensure_one()
+        if (
+            self.provider_code == 'openpay_mxn'
+            and self.state == 'done'
+            and not self.is_post_processed
+        ):
+            self.provider_id._openpay_mxn_ensure_accounting_payment_method()
+            self.with_company(self.company_id)._post_process()
+
     def _extract_amount_data(self, payment_data):
         """Supply Odoo's mandatory amount data for Openpay bank-charge responses.
 
@@ -104,13 +134,14 @@ class PaymentTransaction(models.Model):
         self.ensure_one()
         payment_method = payment_data.get('payment_method') or {}
         provider_reference = payment_data.get('id') or self.provider_reference
+        due_date = self._openpay_mxn_parse_due_date(payment_data.get('due_date'))
         values = {
             'provider_reference': provider_reference,
             'openpay_mxn_agreement': payment_method.get('agreement') or self.openpay_mxn_agreement,
             'openpay_mxn_clabe': payment_method.get('clabe') or self.openpay_mxn_clabe,
             'openpay_mxn_reference': payment_method.get('name') or self.openpay_mxn_reference,
             'openpay_mxn_bank': payment_method.get('bank') or self.openpay_mxn_bank,
-            'openpay_mxn_due_date': payment_data.get('due_date') or self.openpay_mxn_due_date,
+            'openpay_mxn_due_date': due_date or self.openpay_mxn_due_date,
         }
         if provider_reference:
             dashboard = (
@@ -132,9 +163,45 @@ class PaymentTransaction(models.Model):
         else:
             self._set_error(payment_data.get('error_message') or _('Openpay rechazó o no reconoció el cargo.'))
 
+    @staticmethod
+    def _openpay_mxn_parse_due_date(value):
+        """Convert Openpay's ISO-8601 deadline (with offset) to Odoo's UTC datetime value."""
+        if not value:
+            return False
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except (TypeError, ValueError):
+            return False
+        if parsed.tzinfo:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+
     def _cron_openpay_mxn_refresh_pending(self):
         pending_transactions = self.search([
             ('provider_code', '=', 'openpay_mxn'), ('state', '=', 'pending'),
         ])
         for transaction in pending_transactions:
             transaction._openpay_mxn_refresh_status()
+            self._openpay_mxn_try_post_process(transaction)
+
+        # A development database can receive the Openpay event while its HTTP worker is restarting,
+        # or the status can be updated by the refresh above. Catch up every confirmed charge that
+        # has not yet gone through Sales and Accounting post-processing.
+        done_transactions = self.search([
+            ('provider_code', '=', 'openpay_mxn'),
+            ('state', '=', 'done'),
+            ('is_post_processed', '=', False),
+        ])
+        for transaction in done_transactions:
+            self._openpay_mxn_try_post_process(transaction)
+
+    def _openpay_mxn_try_post_process(self, transaction):
+        """Post-process one transaction without preventing later Openpay charges from retrying."""
+        try:
+            with self.env.cr.savepoint():
+                transaction._openpay_mxn_post_process_done_transaction()
+        except Exception:
+            _logger.exception(
+                'Unable to post-process confirmed Openpay transaction %s; it will be retried.',
+                transaction.reference,
+            )

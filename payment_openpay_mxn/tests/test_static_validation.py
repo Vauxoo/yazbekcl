@@ -27,14 +27,38 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn('openpay_mxn_expiration_days', source)
         self.assertIn("'amount': payment_data.get('amount', self.amount)", source)
         self.assertIn("'currency_code': payment_data.get('currency', self.currency_id.name)", source)
+        self.assertIn("datetime.fromisoformat(value.replace('Z', '+00:00'))", source)
+        self.assertIn('parsed.astimezone(timezone.utc).replace(tzinfo=None)', source)
+        self.assertNotIn("'method': 'card'", source)
+        self.assertIn(
+            "['bank_transfer']",
+            (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8'),
+        )
 
     def test_provider_config_exposes_expiration_and_official_environment_urls(self):
         source = (MODULE / 'views' / 'payment_provider_views.xml').read_text(encoding='utf-8')
         self.assertIn('openpay_mxn_expiration_days', source)
         self.assertIn('https://sandbox-api.openpay.mx', source)
         self.assertIn('https://api.openpay.mx', source)
-        self.assertIn("['bank_transfer']", (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8'))
-        self.assertNotIn("'method': 'card'", source)
+
+    def test_redirect_flow_provides_a_form_and_status_transition(self):
+        template = (MODULE / 'views' / 'payment_openpay_mxn_templates.xml').read_text(encoding='utf-8')
+        controller = (MODULE / 'controllers' / 'main.py').read_text(encoding='utf-8')
+        binding = (MODULE / 'data' / 'payment_redirect_binding.xml').read_text(encoding='utf-8')
+        self.assertIn('<form t-att-action="api_url" method="post">', template)
+        self.assertIn("'/payment/openpay_mxn/process'", controller)
+        self.assertIn("request.redirect('/payment/status')", controller)
+        self.assertIn('redirect_form_view_id', binding)
+        provider = (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8')
+        self.assertIn("payment_openpay_mxn.openpay_mxn_redirect_form", provider)
+
+    def test_payment_status_uses_openpay_specific_continue_action_and_layout(self):
+        template = (MODULE / 'views' / 'payment_openpay_mxn_templates.xml').read_text(encoding='utf-8')
+        self.assertIn('Continuar <i class="oi oi-arrow-right ms-1 small"/>', template)
+        self.assertIn("inherit_id=\"payment.payment_status\"", template)
+        self.assertIn('Datos listos para transferir', template)
+        self.assertIn('Confirmaremos tu pedido automáticamente', template)
+        self.assertIn('font-monospace text-break', template)
 
     def test_no_credentials_embedded(self):
         contents = '\n'.join(
@@ -57,6 +81,30 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn("payload.get('transaction')", source)
         self.assertIn("payload.get('verification_code')", source)
         self.assertIn("openpay_mxn_verification_code", source)
+
+    def test_completed_webhook_uses_odoo_post_processing(self):
+        controller = (MODULE / 'controllers' / 'main.py').read_text(encoding='utf-8')
+        transaction = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn('tx._openpay_mxn_post_process_done_transaction()', controller)
+        self.assertIn("self.state == 'done'", transaction)
+        self.assertIn('not self.is_post_processed', transaction)
+        self.assertIn('self.with_company(self.company_id)._post_process()', transaction)
+
+    def test_openpay_refresh_cron_catches_up_confirmed_transactions(self):
+        transaction = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn("('is_post_processed', '=', False)", transaction)
+        self.assertIn('self._openpay_mxn_try_post_process(transaction)', transaction)
+        self.assertIn('with self.env.cr.savepoint():', transaction)
+        self.assertIn('it will be retried.', transaction)
+
+    def test_confirmed_charge_ensures_its_accounting_payment_method_line(self):
+        provider = (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8')
+        transaction = (MODULE / 'models' / 'payment_transaction.py').read_text(encoding='utf-8')
+        self.assertIn('def _openpay_mxn_ensure_accounting_payment_method(self):', provider)
+        self.assertIn("self._setup_payment_method('openpay_mxn')", provider)
+        self.assertIn('self._ensure_payment_method_line()', provider)
+        self.assertIn('inbound_payment_method_line_ids', provider)
+        self.assertIn('self.provider_id._openpay_mxn_ensure_accounting_payment_method()', transaction)
 
     def test_provider_binds_bank_transfer_without_activating_it_in_xml(self):
         binding = (MODULE / 'data' / 'payment_method_binding.xml').read_text(encoding='utf-8')

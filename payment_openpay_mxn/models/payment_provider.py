@@ -62,6 +62,39 @@ class PaymentProvider(models.Model):
             return ['bank_transfer']
         return super()._get_default_payment_method_codes()
 
+    def _get_redirect_form_view(self, is_validation=False):
+        """Always provide Openpay's transition form, including for providers created by old data."""
+        self.ensure_one()
+        if self.code != 'openpay_mxn':
+            return super()._get_redirect_form_view(is_validation=is_validation)
+        return self.env.ref('payment_openpay_mxn.openpay_mxn_redirect_form')
+
+    def _openpay_mxn_ensure_accounting_payment_method(self):
+        """Ensure that Odoo can create the inbound payment for a confirmed Openpay charge.
+
+        `account_payment` creates one payment-method line per electronic provider.  This custom
+        provider can have been installed before that setup was triggered, leaving the provider with
+        a bank journal but no line linked to it.  Ensure the standard records exist immediately
+        before the accounting post-processing rather than falling back to an unrelated manual line.
+        """
+        self.ensure_one()
+        if self.code != 'openpay_mxn':
+            return
+        if not self.journal_id:
+            raise ValidationError(_(
+                'Configure un diario bancario de pago para Openpay antes de procesar cargos confirmados.'
+            ))
+        self._setup_payment_method('openpay_mxn')
+        self._ensure_payment_method_line()
+        payment_method_line = self.journal_id.inbound_payment_method_line_ids.filtered(
+            lambda line: line.payment_provider_id == self
+        )[:1]
+        if not payment_method_line:
+            raise ValidationError(_(
+                'No se pudo crear la línea de método de pago entrante para Openpay.'
+            ))
+        return payment_method_line
+
     def _build_request_url(self, endpoint, **kwargs):
         if self.code != 'openpay_mxn':
             return super()._build_request_url(endpoint, **kwargs)
