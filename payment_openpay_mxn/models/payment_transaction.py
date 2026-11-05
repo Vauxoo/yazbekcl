@@ -83,6 +83,21 @@ class PaymentTransaction(models.Model):
         charge_data['reference'] = self.reference
         self._process('openpay_mxn', charge_data)
 
+    def _extract_amount_data(self, payment_data):
+        """Supply Odoo's mandatory amount data for Openpay bank-charge responses.
+
+        Openpay can omit ``amount`` and ``currency`` from the immediate reference response. In
+        that case, the transaction's original, immutable amount and currency are authoritative.
+        A later status query containing those values is still validated against the transaction.
+        """
+        if self.provider_code != 'openpay_mxn':
+            return super()._extract_amount_data(payment_data)
+        self.ensure_one()
+        return {
+            'amount': payment_data.get('amount', self.amount),
+            'currency_code': payment_data.get('currency', self.currency_id.name),
+        }
+
     def _apply_updates(self, payment_data):
         if self.provider_code != 'openpay_mxn':
             return super()._apply_updates(payment_data)
