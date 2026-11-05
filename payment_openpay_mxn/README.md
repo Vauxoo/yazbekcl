@@ -11,8 +11,10 @@ tokenización, cargos recurrentes ni reembolsos.
 2. Actualice la lista de Aplicaciones e instale **Openpay México - SPEI/CIE**.
 3. En Contabilidad → Configuración → Proveedores de pago, abra el proveedor y capture
    Merchant ID, llave privada y las credenciales HTTP Basic exclusivas para el webhook.
-4. Cambie el proveedor a **Modo de prueba**, active/publíque el método de transferencia
-   bancaria y haga una orden en MXN. Solo después de validar el flujo use **Activado**.
+4. Cambie el proveedor a **Modo de prueba**. En la pestaña **Configuración**, pulse
+   **Enable Payment Methods**, abra **Bank Transfer** y actívelo. El módulo lo vincula al
+   proveedor, pero no lo activa por XML. Publique el proveedor y haga una orden en MXN.
+   Solo después de validar el flujo use **Activado**.
 
 Nunca guarde las claves en XML, Git, tickets o mensajes. Los campos están restringidos
 al administrador de Odoo y el addon no incluye valores de ejemplo que parezcan secretos.

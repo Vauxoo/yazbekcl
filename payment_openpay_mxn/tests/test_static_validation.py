@@ -45,6 +45,12 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn("payload.get('verification_code')", source)
         self.assertIn("openpay_mxn_verification_code", source)
 
+    def test_provider_binds_bank_transfer_without_activating_it_in_xml(self):
+        binding = (MODULE / 'data' / 'payment_method_binding.xml').read_text(encoding='utf-8')
+        self.assertIn("payment.payment_method_bank_transfer", binding)
+        self.assertIn('Command.link', binding)
+        self.assertNotIn('<field name="active">True</field>', binding)
+
 
 if __name__ == '__main__':
     unittest.main()
