@@ -57,6 +57,10 @@ estado posteriormente, valida los valores devueltos por Openpay antes de confirm
 La fecha `due_date` devuelta por Openpay se convierte de ISO 8601 con zona horaria al formato UTC
 interno de Odoo antes de guardarse.
 
+Al generar la referencia, Odoo redirige al comprador a su página de estado y muestra allí CLABE,
+convenio, referencia y el enlace al recibo Openpay. Este paso usa un formulario de transición
+interno, requerido por el flujo `redirect` de Odoo 19.
+
 ## Validación previa a producción
 
 1. Pruebe una orden MXN real en sandbox y confirme que se genera `bank_account`.

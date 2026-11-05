@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <template id="openpay_mxn_redirect_form" name="Openpay MXN payment transition">
+        <form t-att-action="api_url" method="post">
+            <input type="hidden" name="reference" t-att-value="reference"/>
+        </form>
+    </template>
+
     <template id="openpay_mxn_state_header" inherit_id="payment.state_header">
         <xpath expr="//div[@name='o_payment_status_alert']" position="inside">
             <div class="card mt-3" t-if="tx and tx.provider_code == 'openpay_mxn' and tx.openpay_mxn_reference">

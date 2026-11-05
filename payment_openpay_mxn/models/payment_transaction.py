@@ -46,6 +46,14 @@ class PaymentTransaction(models.Model):
             'openpay_mxn_receipt_url': self.openpay_mxn_receipt_url,
         }
 
+    def _get_specific_rendering_values(self, processing_values):
+        if self.provider_code != 'openpay_mxn':
+            return super()._get_specific_rendering_values(processing_values)
+        return {
+            'api_url': '/payment/openpay_mxn/process',
+            'reference': self.reference,
+        }
+
     def _openpay_mxn_prepare_customer_data(self):
         """Prepare the inline customer accepted by Openpay's merchant charge endpoint."""
         self.ensure_one()

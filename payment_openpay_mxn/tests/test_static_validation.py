@@ -29,14 +29,26 @@ class TestStaticValidation(unittest.TestCase):
         self.assertIn("'currency_code': payment_data.get('currency', self.currency_id.name)", source)
         self.assertIn("datetime.fromisoformat(value.replace('Z', '+00:00'))", source)
         self.assertIn('parsed.astimezone(timezone.utc).replace(tzinfo=None)', source)
+        self.assertNotIn("'method': 'card'", source)
+        self.assertIn(
+            "['bank_transfer']",
+            (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8'),
+        )
 
     def test_provider_config_exposes_expiration_and_official_environment_urls(self):
         source = (MODULE / 'views' / 'payment_provider_views.xml').read_text(encoding='utf-8')
         self.assertIn('openpay_mxn_expiration_days', source)
         self.assertIn('https://sandbox-api.openpay.mx', source)
         self.assertIn('https://api.openpay.mx', source)
-        self.assertIn("['bank_transfer']", (MODULE / 'models' / 'payment_provider.py').read_text(encoding='utf-8'))
-        self.assertNotIn("'method': 'card'", source)
+
+    def test_redirect_flow_provides_a_form_and_status_transition(self):
+        template = (MODULE / 'views' / 'payment_openpay_mxn_templates.xml').read_text(encoding='utf-8')
+        controller = (MODULE / 'controllers' / 'main.py').read_text(encoding='utf-8')
+        binding = (MODULE / 'data' / 'payment_redirect_binding.xml').read_text(encoding='utf-8')
+        self.assertIn('<form t-att-action="api_url" method="post">', template)
+        self.assertIn("'/payment/openpay_mxn/process'", controller)
+        self.assertIn("request.redirect('/payment/status')", controller)
+        self.assertIn('redirect_form_view_id', binding)
 
     def test_no_credentials_embedded(self):
         contents = '\n'.join(

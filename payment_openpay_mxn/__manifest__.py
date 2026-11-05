@@ -1,6 +1,6 @@
 {
     'name': 'Openpay México - SPEI/CIE',
-    'version': '19.0.1.0.7',
+    'version': '19.0.1.0.8',
     'category': 'Accounting/Payment Providers',
     'summary': 'Referencias de pago SPEI/CIE con Openpay México',
     'description': 'Genera cargos bank_account de Openpay para pagos SPEI/CIE.',
@@ -12,6 +12,7 @@
         'views/payment_provider_views.xml',
         'views/payment_transaction_views.xml',
         'views/payment_openpay_mxn_templates.xml',
+        'data/payment_redirect_binding.xml',
     ],
     'demo': [],
     'license': 'LGPL-3',
