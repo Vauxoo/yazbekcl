@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<odoo>
-    <!-- This file is deliberately not noupdate: it also repairs providers installed by an
-         earlier version, without changing their state or their credentials. -->
-    <record id="payment_provider_openpay_mxn" model="payment.provider">
-        <field name="payment_method_ids" eval="[Command.link(ref('payment.payment_method_bank_transfer'))]"/>
-    </record>
-</odoo>

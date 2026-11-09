@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<odoo>
-    <!-- Not noupdate: applies the redirect form to providers installed by prior addon versions. -->
-    <record id="payment_provider_openpay_mxn" model="payment.provider">
-        <field name="redirect_form_view_id" ref="openpay_mxn_redirect_form"/>
-    </record>
-</odoo>
