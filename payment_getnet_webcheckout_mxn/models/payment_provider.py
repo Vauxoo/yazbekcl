@@ -149,6 +149,9 @@ class PaymentProvider(models.Model):
             content = response.text
         ciphertext = content.get('data') if isinstance(content, dict) else content
         if not isinstance(ciphertext, str) or not ciphertext:
+            message = content.get('message') if isinstance(content, dict) else None
+            if message:
+                raise ValidationError(_('Get Checkout no devolvió la liga cifrada esperada: %s', message))
             raise ValidationError(_('Get Checkout no devolvió la respuesta cifrada esperada.'))
         return self._getcheckout_decrypt_payload(ciphertext)
 
