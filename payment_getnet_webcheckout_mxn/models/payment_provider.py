@@ -121,7 +121,14 @@ class PaymentProvider(models.Model):
 
     def _getcheckout_decrypt_payload(self, ciphertext):
         self.ensure_one()
-        plaintext = getcheckout_crypto.decrypt(ciphertext, self.getcheckout_aes_key)
+        try:
+            plaintext = getcheckout_crypto.decrypt(ciphertext, self.getcheckout_aes_key)
+        except ValueError as error:
+            # Keep encryption details out of the storefront and avoid returning
+            # an unhandled RPC error when MIT sends an invalid response.
+            raise ValidationError(
+                _('Get Checkout devolvió una respuesta cifrada inválida.')
+            ) from error
         try:
             decoded = json.loads(plaintext)
         except json.JSONDecodeError as error:

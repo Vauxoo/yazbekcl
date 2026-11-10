@@ -32,8 +32,12 @@ def encrypt(plaintext, aes_key):
 def decrypt(ciphertext, aes_key):
     """Decrypt a Base64(IV + ciphertext) value and return UTF-8 text."""
     key = _key_from_hex(aes_key)
+    # MIT can wrap the encrypted JSON response in lines. Whitespace is not part
+    # of Base64, so remove it before validating; do not relax validation for any
+    # other character or silently discard appended data.
+    normalized_ciphertext = ''.join((ciphertext or '').split())
     try:
-        encrypted = base64.b64decode((ciphertext or '').encode('ascii'), validate=True)
+        encrypted = base64.b64decode(normalized_ciphertext.encode('ascii'), validate=True)
     except (ValueError, UnicodeEncodeError) as error:
         raise ValueError('La respuesta cifrada no tiene un Base64 válido.') from error
     if len(encrypted) <= 16 or len(encrypted[16:]) % 16:
