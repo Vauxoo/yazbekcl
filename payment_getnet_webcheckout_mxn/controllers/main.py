@@ -19,8 +19,10 @@ class GetCheckoutController(http.Controller):
     _return_url = '/payment/getcheckout_mxn/return'
 
     @http.route(_webhook_url, type='http', auth='public', methods=['POST'], csrf=False, save_session=False)
-    def getcheckout_webhook(self, **kwargs):
-        encrypted_response = request.httprequest.form.get('strResponse')
+    def getcheckout_webhook(self, strResponse=None, **kwargs):
+        # Declare ``strResponse`` explicitly: Odoo validates route arguments
+        # before entering the controller and otherwise logs it as ignored.
+        encrypted_response = strResponse or request.httprequest.form.get('strResponse')
         if not encrypted_response:
             json_data = request.get_json_data() or {}
             encrypted_response = json_data.get('strResponse')
