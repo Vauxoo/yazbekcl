@@ -19,7 +19,7 @@ class GetCheckoutController(http.Controller):
     _return_url = '/payment/getcheckout_mxn/return'
 
     @http.route(_webhook_url, type='http', auth='public', methods=['POST'], csrf=False, save_session=False)
-    def getcheckout_webhook(self):
+    def getcheckout_webhook(self, **kwargs):
         encrypted_response = request.httprequest.form.get('strResponse')
         if not encrypted_response:
             json_data = request.get_json_data() or {}
