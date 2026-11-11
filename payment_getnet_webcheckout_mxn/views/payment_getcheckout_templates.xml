@@ -55,4 +55,38 @@
             </section>
         </xpath>
     </template>
+
+    <template
+        id="getcheckout_confirmation_auto_refresh"
+        name="Get Checkout automatic confirmation refresh"
+        inherit_id="website_sale.payment_confirmation_status"
+    >
+        <xpath expr="//div[@name='order_confirmation']" position="after">
+            <t t-set="getcheckout_pending_tx" t-value="order.get_portal_last_transaction()"/>
+            <t t-if="getcheckout_pending_tx and getcheckout_pending_tx.provider_code == 'getcheckout_mxn' and getcheckout_pending_tx.state == 'pending'">
+                <p class="text-info small mt-2 mb-0" role="status">
+                    Estamos validando tu pago con el banco. Esta página se actualizará automáticamente.
+                </p>
+                <script t-att-data-getcheckout-reference="getcheckout_pending_tx.reference" type="text/javascript">
+                    (function () {
+                        var script = document.currentScript;
+                        var storageKey = 'getcheckout-poll-' + script.dataset.getcheckoutReference;
+                        var attempts = 0;
+                        try {
+                            attempts = parseInt(window.sessionStorage.getItem(storageKey) || '0', 10) || 0;
+                            if (attempts >= 15) {
+                                return;
+                            }
+                            window.sessionStorage.setItem(storageKey, String(attempts + 1));
+                        } catch (error) {
+                            return;
+                        }
+                        window.setTimeout(function () {
+                            window.location.reload();
+                        }, 2000);
+                    }());
+                </script>
+            </t>
+        </xpath>
+    </template>
 </odoo>
