@@ -44,6 +44,24 @@ class PaymentTransaction(models.Model):
         self._set_pending()
         return {'checkout_url': checkout_url}
 
+    def _getcheckout_mxn_post_process_done_transaction(self):
+        """Finalize one approved transaction using Odoo's standard business flow.
+
+        MIT's server-to-server notification does not run the buyer browser's
+        normal payment-status polling. This method makes the webhook complete
+        the same idempotent Sales and Accounting post-processing: confirming
+        the linked quotation and creating the customer payment when Accounting
+        is installed.
+        """
+        self.ensure_one()
+        if (
+            self.provider_code == const.PROVIDER_CODE
+            and self.state == 'done'
+            and not self.is_post_processed
+        ):
+            self.provider_id._getcheckout_mxn_ensure_accounting_payment_method()
+            self.with_company(self.company_id)._post_process()
+
     def _getcheckout_prepare_request_payload(self):
         self.ensure_one()
         provider = self.provider_id

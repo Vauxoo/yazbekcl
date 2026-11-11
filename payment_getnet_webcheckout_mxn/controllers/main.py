@@ -47,9 +47,7 @@ class GetCheckoutController(http.Controller):
             ], limit=1)
             if tx_sudo:
                 tx_sudo._process(const.PROVIDER_CODE, payment_data)
-                # State changes alone do not trigger the eCommerce hooks that
-                # confirm the sale order and post the payment consequences.
-                tx_sudo._post_process()
+                tx_sudo._getcheckout_mxn_post_process_done_transaction()
                 return request.make_response('')
 
         _logger.warning('Rejected Get Checkout notification: no matching provider or transaction.')

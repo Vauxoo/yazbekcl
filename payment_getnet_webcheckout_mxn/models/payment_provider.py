@@ -94,6 +94,32 @@ class PaymentProvider(models.Model):
             return super()._get_default_payment_method_codes()
         return const.DEFAULT_PAYMENT_METHOD_CODES
 
+    def _getcheckout_mxn_ensure_accounting_payment_method(self):
+        """Prepare this provider's inbound payment line before post-processing.
+
+        Odoo creates accounting payments for completed online transactions from
+        a provider-specific incoming payment-method line. Creating it here
+        avoids using an unrelated manual method and lets the standard
+        post-processing confirm the sale order and create the customer payment.
+        """
+        self.ensure_one()
+        if self.code != const.PROVIDER_CODE:
+            return
+        if not self.journal_id:
+            raise ValidationError(_(
+                'Configura un diario bancario de pago para Get Checkout antes de procesar pagos aprobados.'
+            ))
+        self._setup_payment_method(const.PROVIDER_CODE)
+        self._ensure_payment_method_line()
+        payment_method_line = self.journal_id.inbound_payment_method_line_ids.filtered(
+            lambda line: line.payment_provider_id == self
+        )[:1]
+        if not payment_method_line:
+            raise ValidationError(_(
+                'No se pudo crear la línea de método de pago entrante para Get Checkout.'
+            ))
+        return payment_method_line
+
     def _get_supported_currencies(self):
         currencies = super()._get_supported_currencies()
         if self.code == const.PROVIDER_CODE:
