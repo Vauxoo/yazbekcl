@@ -16,6 +16,7 @@ class GetCheckoutController(http.Controller):
     """Receive the encrypted server-to-server notification configured in MIT."""
 
     _webhook_url = '/payment/getcheckout_mxn/webhook'
+    _return_url = '/payment/getcheckout_mxn/return'
 
     @http.route(_webhook_url, type='http', auth='public', methods=['POST'], csrf=False, save_session=False)
     def getcheckout_webhook(self):
@@ -46,7 +47,22 @@ class GetCheckoutController(http.Controller):
             ], limit=1)
             if tx_sudo:
                 tx_sudo._process(const.PROVIDER_CODE, payment_data)
+                # State changes alone do not trigger the eCommerce hooks that
+                # confirm the sale order and post the payment consequences.
+                tx_sudo._post_process()
                 return request.make_response('')
 
         _logger.warning('Rejected Get Checkout notification: no matching provider or transaction.')
         raise NotFound()
+
+    @http.route(
+        _return_url, type='http', auth='public', methods=['GET', 'POST'],
+        csrf=False, website=True, sitemap=False,
+    )
+    def getcheckout_return(self, **kwargs):
+        """Return the cardholder to the standard eCommerce confirmation page.
+
+        MIT must configure this optional redirect URL. The server-to-server
+        webhook remains the authoritative source for the payment result.
+        """
+        return request.redirect('/shop/confirmation')
