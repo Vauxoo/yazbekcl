@@ -17,6 +17,7 @@ class PaymentTransaction(models.Model):
     getcheckout_folio = fields.Char(string='Get Checkout folio', copy=False, readonly=True)
     getcheckout_authorization = fields.Char(string='Get Checkout autorización', copy=False, readonly=True)
     getcheckout_card_mask = fields.Char(string='Get Checkout tarjeta enmascarada', copy=False, readonly=True)
+    getcheckout_card_type = fields.Char(string='Get Checkout tipo de tarjeta', copy=False, readonly=True)
     getcheckout_response_code = fields.Char(string='Get Checkout código de respuesta', copy=False, readonly=True)
 
     def _get_specific_rendering_values(self, processing_values):
@@ -57,10 +58,57 @@ class PaymentTransaction(models.Model):
         if (
             self.provider_code == const.PROVIDER_CODE
             and self.state == 'done'
-            and not self.is_post_processed
         ):
-            self.provider_id._getcheckout_mxn_ensure_accounting_payment_method()
-            self.with_company(self.company_id)._post_process()
+            if not self.is_post_processed:
+                self.provider_id._getcheckout_mxn_ensure_accounting_payment_method()
+                self.with_company(self.company_id)._post_process()
+            # Keep the Mexican CFDI payment form synchronized even when a
+            # confirmed webhook is replayed after an upgrade.
+            self._getcheckout_mxn_apply_cfdi_payment_form()
+
+    def _getcheckout_mxn_apply_cfdi_payment_form(self):
+        """Set CFDI form 04/28 from MIT's approved-card classification.
+
+        MIT provides ``cc_type`` only after an approved charge.  The value is
+        authoritative for whether the customer used credit or debit, whereas
+        the checkout form itself cannot know that beforehand.  The Mexican
+        localization is optional, so all access is guarded for installations
+        that do not use its models or fields.
+        """
+        self.ensure_one()
+        card_type = (self.getcheckout_card_type or '').upper().replace('É', 'E')
+        if 'CREDITO' in card_type:
+            cfdi_code = '04'  # Tarjeta de crédito.
+        elif 'DEBITO' in card_type:
+            cfdi_code = '28'  # Tarjeta de débito.
+        else:
+            return
+
+        if 'l10n_mx_edi.payment.method' not in self.env:
+            return
+        cfdi_payment_form = self.env['l10n_mx_edi.payment.method'].sudo().search(
+            [('code', '=', cfdi_code)], limit=1,
+        )
+        if not cfdi_payment_form:
+            return
+
+        payment_form_field = 'l10n_mx_edi_payment_method_id'
+        values = {payment_form_field: cfdi_payment_form.id}
+        sale_orders = self.sale_order_ids
+        if sale_orders and payment_form_field in sale_orders._fields:
+            sale_orders.write(values)
+
+        if 'account.payment' not in self.env:
+            return
+        payment_model = self.env['account.payment'].sudo()
+        transaction_field_names = [
+            name for name, field in payment_model._fields.items()
+            if getattr(field, 'comodel_name', None) == 'payment.transaction'
+        ]
+        for transaction_field_name in transaction_field_names:
+            payments = payment_model.search([(transaction_field_name, '=', self.id)])
+            if payments and payment_form_field in payments._fields:
+                payments.write(values)
 
     def _getcheckout_prepare_request_payload(self):
         self.ensure_one()
@@ -111,6 +159,7 @@ class PaymentTransaction(models.Model):
             'getcheckout_folio': str(payment_data.get('foliocpagos') or ''),
             'getcheckout_authorization': str(payment_data.get('auth') or ''),
             'getcheckout_card_mask': payment_data.get('cc_mask') or '',
+            'getcheckout_card_type': payment_data.get('cc_type') or '',
             'getcheckout_response_code': str(payment_data.get('cd_response') or ''),
         }
         if payment_data.get('foliocpagos'):
