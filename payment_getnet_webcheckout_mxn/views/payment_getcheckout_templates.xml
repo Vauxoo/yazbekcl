@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="redirect_form" name="Get Checkout redirect form">
+        <!-- MIT creates an opaque, single-use payment URL. Credentials never reach the browser. -->
+        <form t-att-action="checkout_url" method="get"/>
+    </template>
+
+    <template
+        id="getcheckout_confirmation_error_details"
+        name="Get Checkout payment error on eCommerce confirmation"
+        inherit_id="website_sale.payment_confirmation_status"
+    >
+        <xpath expr="//div[@name='order_confirmation']" position="after">
+            <t t-set="getcheckout_failed_tx" t-value="order.get_portal_last_transaction()"/>
+            <section
+                t-if="getcheckout_failed_tx and getcheckout_failed_tx.provider_code == 'getcheckout_mxn' and getcheckout_failed_tx.state in ('cancel', 'error')"
+                class="card border-danger mt-3"
+                role="alert"
+            >
+                <div class="card-body">
+                    <h5 class="card-title text-danger mb-3">
+                        <i class="fa fa-times-circle me-2"/>No fue posible procesar tu pago
+                    </h5>
+                    <p class="mb-3" t-out="getcheckout_failed_tx.getcheckout_customer_message or 'No fue posible confirmar el pago. No se realizó ningún cargo.'"/>
+                    <p class="text-muted small mb-0">
+                        Referencia de la orden: <strong t-out="getcheckout_failed_tx.reference"/>.
+                    </p>
+                </div>
+            </section>
+        </xpath>
+    </template>
+
+    <template
+        id="getcheckout_confirmation_details"
+        name="Get Checkout payment receipt on eCommerce confirmation"
+        inherit_id="website_sale.payment_confirmation_status"
+    >
+        <xpath expr="//div[@name='order_confirmation']" position="after">
+            <t t-set="getcheckout_tx" t-value="order.get_portal_last_transaction()"/>
+            <section
+                t-if="getcheckout_tx and getcheckout_tx.provider_code == 'getcheckout_mxn' and getcheckout_tx.state == 'done'"
+                class="card border-success mt-3"
+                aria-live="polite"
+            >
+                <div class="card-body">
+                    <h5 class="card-title text-success mb-3">
+                        <i class="fa fa-check-circle me-2"/>Pago aprobado
+                    </h5>
+                    <p class="text-muted mb-3">
+                        Conserva estos datos como comprobante de tu pago.
+                    </p>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Importe</dt>
+                        <dd class="col-sm-7">
+                            <span
+                                t-field="getcheckout_tx.amount"
+                                t-options="{'widget': 'monetary', 'display_currency': getcheckout_tx.currency_id}"
+                            />
+                        </dd>
+                        <dt class="col-sm-5">Referencia</dt>
+                        <dd class="col-sm-7" t-out="getcheckout_tx.reference"/>
+                        <t t-if="getcheckout_tx.getcheckout_authorization">
+                            <dt class="col-sm-5">Autorización</dt>
+                            <dd class="col-sm-7" t-out="getcheckout_tx.getcheckout_authorization"/>
+                        </t>
+                        <t t-if="getcheckout_tx.getcheckout_folio">
+                            <dt class="col-sm-5">Folio MIT</dt>
+                            <dd class="col-sm-7" t-out="getcheckout_tx.getcheckout_folio"/>
+                        </t>
+                        <t t-if="getcheckout_tx.getcheckout_card_type">
+                            <dt class="col-sm-5">Tipo de tarjeta</dt>
+                            <dd class="col-sm-7" t-out="getcheckout_tx.getcheckout_card_type"/>
+                        </t>
+                        <t t-if="getcheckout_tx.getcheckout_card_mask">
+                            <dt class="col-sm-5">Tarjeta</dt>
+                            <dd class="col-sm-7" t-out="getcheckout_tx.getcheckout_card_mask"/>
+                        </t>
+                    </dl>
+                </div>
+            </section>
+        </xpath>
+    </template>
+
+    <template
+        id="getcheckout_confirmation_auto_refresh"
+        name="Get Checkout automatic confirmation refresh"
+        inherit_id="website_sale.payment_confirmation_status"
+    >
+        <xpath expr="//div[@name='order_confirmation']" position="after">
+            <t t-set="getcheckout_pending_tx" t-value="order.get_portal_last_transaction()"/>
+            <t t-if="getcheckout_pending_tx and getcheckout_pending_tx.provider_code == 'getcheckout_mxn' and getcheckout_pending_tx.state == 'pending'">
+                <p class="text-info small mt-2 mb-0" role="status">
+                    Estamos validando tu pago con el banco. Esta página se actualizará automáticamente.
+                </p>
+                <script t-att-data-getcheckout-reference="getcheckout_pending_tx.reference" type="text/javascript">
+                    (function () {
+                        var script = document.currentScript;
+                        var storageKey = 'getcheckout-poll-' + script.dataset.getcheckoutReference;
+                        var attempts = 0;
+                        try {
+                            attempts = parseInt(window.sessionStorage.getItem(storageKey) || '0', 10) || 0;
+                            if (attempts >= 15) {
+                                return;
+                            }
+                            window.sessionStorage.setItem(storageKey, String(attempts + 1));
+                        } catch (error) {
+                            return;
+                        }
+                        window.setTimeout(function () {
+                            window.location.reload();
+                        }, 2000);
+                    }());
+                </script>
+            </t>
+        </xpath>
+    </template>
+</odoo>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="payment_transaction_form_getcheckout_mxn" model="ir.ui.view">
+        <field name="name">payment.transaction.form.getcheckout.mxn</field>
+        <field name="model">payment.transaction</field>
+        <field name="inherit_id" ref="payment.payment_transaction_form"/>
+        <field name="arch" type="xml">
+            <group name="transaction_details" position="after">
+                <group string="Get Checkout (MIT México)" invisible="provider_code != 'getcheckout_mxn'">
+                    <field name="getcheckout_id_url"/>
+                    <field name="getcheckout_folio"/>
+                    <field name="getcheckout_authorization"/>
+                    <field name="getcheckout_response_code"/>
+                    <field name="getcheckout_customer_message"/>
+                    <field name="getcheckout_card_type"/>
+                    <field name="getcheckout_card_mask"/>
+                </group>
+                <group
+                    string="Auditoría Get Checkout (MIT México)"
+                    groups="base.group_system"
+                    invisible="provider_code != 'getcheckout_mxn'"
+                >
+                    <field name="getcheckout_response_json" nolabel="1" colspan="2"/>
+                </group>
+            </group>
+        </field>
+    </record>
+</odoo>
