@@ -6,6 +6,31 @@
     </template>
 
     <template
+        id="getcheckout_confirmation_error_details"
+        name="Get Checkout payment error on eCommerce confirmation"
+        inherit_id="website_sale.payment_confirmation_status"
+    >
+        <xpath expr="//div[@name='order_confirmation']" position="after">
+            <t t-set="getcheckout_failed_tx" t-value="order.get_portal_last_transaction()"/>
+            <section
+                t-if="getcheckout_failed_tx and getcheckout_failed_tx.provider_code == 'getcheckout_mxn' and getcheckout_failed_tx.state in ('cancel', 'error')"
+                class="card border-danger mt-3"
+                role="alert"
+            >
+                <div class="card-body">
+                    <h5 class="card-title text-danger mb-3">
+                        <i class="fa fa-times-circle me-2"/>No fue posible procesar tu pago
+                    </h5>
+                    <p class="mb-3" t-out="getcheckout_failed_tx.getcheckout_customer_message or 'No fue posible confirmar el pago. No se realizó ningún cargo.'"/>
+                    <p class="text-muted small mb-0">
+                        Referencia de la orden: <strong t-out="getcheckout_failed_tx.reference"/>.
+                    </p>
+                </div>
+            </section>
+        </xpath>
+    </template>
+
+    <template
         id="getcheckout_confirmation_details"
         name="Get Checkout payment receipt on eCommerce confirmation"
         inherit_id="website_sale.payment_confirmation_status"

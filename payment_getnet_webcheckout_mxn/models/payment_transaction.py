@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal, ROUND_HALF_UP
 
 from odoo import _, api, fields, models
@@ -19,6 +20,14 @@ class PaymentTransaction(models.Model):
     getcheckout_card_mask = fields.Char(string='Get Checkout tarjeta enmascarada', copy=False, readonly=True)
     getcheckout_card_type = fields.Char(string='Get Checkout tipo de tarjeta', copy=False, readonly=True)
     getcheckout_response_code = fields.Char(string='Get Checkout código de respuesta', copy=False, readonly=True)
+    getcheckout_customer_message = fields.Char(
+        string='Get Checkout mensaje para cliente', copy=False, readonly=True,
+        help='Mensaje seguro para mostrar en eCommerce cuando MIT rechaza o no puede procesar el pago.',
+    )
+    getcheckout_response_json = fields.Text(
+        string='Get Checkout respuesta JSON', copy=False, readonly=True, groups='base.group_system',
+        help='Respuesta descifrada recibida de MIT. Las claves sensibles se ocultan antes de guardarse.',
+    )
 
     def _get_specific_rendering_values(self, processing_values):
         if self.provider_code != const.PROVIDER_CODE:
@@ -161,6 +170,8 @@ class PaymentTransaction(models.Model):
             'getcheckout_card_mask': payment_data.get('cc_mask') or '',
             'getcheckout_card_type': payment_data.get('cc_type') or '',
             'getcheckout_response_code': str(payment_data.get('cd_response') or ''),
+            'getcheckout_customer_message': self._getcheckout_customer_payment_message(payment_data),
+            'getcheckout_response_json': self._getcheckout_format_response_for_audit(payment_data),
         }
         if payment_data.get('foliocpagos'):
             values['provider_reference'] = str(payment_data['foliocpagos'])
@@ -171,3 +182,51 @@ class PaymentTransaction(models.Model):
             self._set_canceled(state_message=payment_data.get('nb_error') or _('Pago rechazado por Get Checkout.'))
         else:
             self._set_error(payment_data.get('nb_error') or _('Respuesta no reconocida de Get Checkout.'))
+
+    def _getcheckout_customer_payment_message(self, payment_data):
+        """Return a customer-safe explanation without exposing MIT internals."""
+        response = (payment_data.get('response') or '').lower()
+        if response == 'approved':
+            return False
+
+        response_code = str(payment_data.get('cd_response') or '')
+        provider_error = str(payment_data.get('nb_error') or '').strip()
+        if response_code == '11' or 'afiliacion' in provider_error.lower():
+            return _(
+                'El importe de esta compra excede el límite permitido para esta transacción. '
+                'Intenta con un monto menor o comunícate con nosotros.'
+            )
+        if provider_error:
+            # MIT is authoritative for a rejection reason. QWeb escapes this text
+            # before rendering it in the storefront.
+            return provider_error
+        if response == 'denied':
+            return _(
+                'El banco no autorizó el pago. La causa puede variar según la tarjeta o el banco. '
+                'Intenta con otra tarjeta o consulta a tu banco.'
+            )
+        return _(
+            'No pudimos confirmar tu pago. No realices otro intento hasta confirmar el estado '
+            'con nuestro equipo.'
+        )
+
+    def _getcheckout_format_response_for_audit(self, payment_data):
+        """Keep a readable, admin-only copy of MIT's decoded notification.
+
+        The encrypted ``strResponse`` is intentionally not persisted.  Although MIT's
+        response normally contains masked card information only, remove credentials
+        defensively in case its response schema changes.
+        """
+        sensitive_keys = {'pwd', 'password', 'aes_key', 'key', 'secret', 'token'}
+
+        def _redact(value):
+            if isinstance(value, dict):
+                return {
+                    key: '[oculto]' if key.lower() in sensitive_keys else _redact(item)
+                    for key, item in value.items()
+                }
+            if isinstance(value, list):
+                return [_redact(item) for item in value]
+            return value
+
+        return json.dumps(_redact(payment_data), ensure_ascii=False, indent=2, sort_keys=True, default=str)
