@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="payment_provider_form_getcheckout_mxn" model="ir.ui.view">
+        <field name="name">Get Checkout Mexico payment provider form</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <group name="provider_credentials" position="inside">
+                <group name="getcheckout_mxn_credentials" invisible="code != 'getcheckout_mxn'" groups="base.group_system">
+                    <field name="getcheckout_company_id"/>
+                    <field name="getcheckout_branch_id"/>
+                    <field name="getcheckout_user"/>
+                    <field name="getcheckout_password" password="True"/>
+                    <field name="getcheckout_data0" password="True"/>
+                    <field name="getcheckout_aes_key" password="True"/>
+                    <field name="getcheckout_qa_url"/>
+                    <field name="getcheckout_production_url" invisible="state != 'enabled'"/>
+                    <field name="getcheckout_suppress_email_notification"/>
+                    <div class="text-muted" colspan="2">
+                        <span class="o_form_label">URL de notificación (webhook)</span>
+                        <br/>
+                        Solicita a MIT que configure <code>/payment/getcheckout_mxn/webhook</code> usando la URL pública HTTPS de este Odoo.
+                    </div>
+                </group>
+            </group>
+            <group name="provider_credentials" position="after">
+                <group name="getcheckout_mxn_publication" invisible="code != 'getcheckout_mxn'">
+                    <button name="action_toggle_is_published" string="Publicar en sitio web" type="object" class="btn-primary" invisible="is_published or state == 'disabled'"/>
+                    <button name="action_toggle_is_published" string="Despublicar del sitio web" type="object" class="btn-secondary" invisible="not is_published"/>
+                </group>
+            </group>
+        </field>
+    </record>
+</odoo>
