@@ -401,43 +401,17 @@ class YazbekVariantMatrix extends Interaction {
             this._runInfoQueue();
         });
     }
-    async _switchWebsitePricelist(pricelistId) {
+    // El cambio de tarifa del pedido lo ejecuta sale.order en el servidor
+    // al agregar, cambiar o borrar cantidades. Aquí solo elegimos qué
+    // precios mostrar usando el caché de ambas tarifas. Sin GET/redirect.
+    _activateDisplayPricelist(pricelistId) {
         const id = Number(pricelistId || 0);
         if (!id) {
-            return false;
+            throw new Error("Yazbek Matrix: tarifa no configurada");
         }
-        // Impedir que una llamada de otra tarifa lea la sesión equivocada.
-        while (this._pricingSwitchPromise) {
-            await this._pricingSwitchPromise;
-        }
-        if (this._activePricelistId === id) {
-            return false;
-        }
-        const operation = (async () => {
-            // Los RPC ya iniciados terminan con su propia tarifa ANTES de cambiar.
-            await this._waitForInfoIdle();
-            const response = await fetch(`/shop/change_pricelist/${id}`, {
-                method: "GET",
-                credentials: "same-origin",
-                redirect: "follow",
-                cache: "no-store",
-                headers: { "X-Requested-With": "XMLHttpRequest" },
-            });
-            if (!response.ok) {
-                throw new Error(`No fue posible activar la lista ${id}. HTTP ${response.status}`);
-            }
-            this._activePricelistId = id;
-            // No borrar la caché: está separada por lista y combinación.
-            return true;
-        })();
-        this._pricingSwitchPromise = operation;
-        try {
-            return await operation;
-        } finally {
-            if (this._pricingSwitchPromise === operation) {
-                this._pricingSwitchPromise = null;
-            }
-        }
+        const changed = this._activePricelistId !== id;
+        this._activePricelistId = id;
+        return changed;
     }
     _updatePriceCardActiveState(
         target,
@@ -571,6 +545,9 @@ class YazbekVariantMatrix extends Interaction {
     }
 
     _cacheCurrentReferencePrice(wrapper) {
+        // Precios «Desde» del lote son para 1 y 12 piezas, no usar
+        // los precios variables de las celdas para sobrescribirlos.
+        if (this._batchPrices.size && this._referencePriceCache.size) return;
         const id = Number(this._activePricelistId || 0);
         // «Desde» solo será definitivo una vez consultadas TODAS las variantes.
         if (!id || this._matrixLoadInProgress ||
@@ -764,66 +741,22 @@ class YazbekVariantMatrix extends Interaction {
                 ? `Tarifa: Mayoreo · ${this._formatStock(target.projectedUnits)} piezas consideradas`
                 : `Tarifa: Menudeo · Mayoreo desde ${this._formatStock(threshold)} piezas`;
     }
-    async _applyPricingForSelection(
-        wrapper,
-        templateId,
-        {
-            reloadAll = true,
-        } = {}
-    ) {
-        const target =
-            this._getPricingTarget(
-                wrapper
-            );
-        this._updatePricingStatus(
-            wrapper,
-            target,
-            true
-        );
-        let changed = false;
+    async _applyPricingForSelection(wrapper, templateId, { reloadAll = true } = {}) {
+        const target = this._getPricingTarget(wrapper);
+        this._updatePricingStatus(wrapper, target, true);
         try {
-            if (target.pricelistId) {
-                changed =
-                    await this._switchWebsitePricelist(
-                        target.pricelistId
-                    );
-            } else {
-                console.error(
-                    "Yazbek Matrix: no se encontró la lista de precios requerida",
-                    target
-                );
+            const changed = this._activateDisplayPricelist(target.pricelistId);
+            // Los precios de la otra tarifa ya están cargados; no hacer GET
+            // a /shop/change_pricelist. Solo renderizar la matriz local.
+            if (reloadAll || changed) {
+                await this._loadInfoForMode(wrapper, templateId);
             }
-            this._updatePricingStatus(
-                wrapper,
-                target,
-                false
-            );
-            if (
-                reloadAll ||
-                changed
-            ) {
-                await this._loadInfoForMode(
-                    wrapper,
-                    templateId
-                );
-            }
-            return {
-                ...target,
-                changed,
-            };
+            this._updatePricingStatus(wrapper, target, false);
+            return { ...target, changed };
         } catch (error) {
-            console.error(
-                "Yazbek Matrix: error cambiando lista de precios",
-                error
-            );
-            const element =
-                wrapper.querySelector(
-                    ".yazbek-pricing-status"
-                );
-            if (element) {
-                element.textContent =
-                    "No fue posible actualizar la tarifa.";
-            }
+            console.error("Yazbek Matrix: no se pudo mostrar la tarifa", error);
+            const el = wrapper.querySelector(".yazbek-pricing-status");
+            if (el) el.textContent = "No fue posible actualizar la tarifa.";
             throw error;
         }
     }
@@ -862,59 +795,43 @@ class YazbekVariantMatrix extends Interaction {
         }, 350);
     }
     async _getWebsiteInfo(templateId, productId, ptavIds, uomId, quantity) {
-        // Esperar al cambio de tarifa para que la consulta use la sesión correcta.
-        while (this._pricingSwitchPromise) {
-            await this._pricingSwitchPromise;
-        }
         const qty = Math.max(Number(quantity || 1), 1);
         const pricelistId = Number(this._activePricelistId || 0);
+        if (!pricelistId) {
+            throw new Error("Yazbek Matrix: tarifa activa inválida");
+        }
+        // La carga inicial de cada variante se resuelve sin nuevos HTTP.
         if (qty === 1 && this._batchTemplateId === Number(templateId)) {
-            const batch = this._batchPrices.get(pricelistId);
-            const cached = batch?.get(Number(productId));
-            if (cached) {
-                return cached;
-            }
+            const cached = this._batchPrices.get(pricelistId)?.get(Number(productId));
+            if (cached) return cached;
         }
-        const combination = Array.isArray(ptavIds) ? [...ptavIds].sort((a,b)=>a-b) : [];
-        const key = [templateId, pricelistId, productId, uomId,
-                     qty, combination.join(",")].join("|");
-        if (this._infoCache.has(key)) {
-            // Tanto un resultado listo como una solicitud pendiente se reutilizan.
-            return this._infoCache.get(key);
-        }
+        const combination = Array.isArray(ptavIds) ? [...ptavIds].sort((a, b) => a-b) : [];
+        const key = [templateId, pricelistId, productId, uomId, qty, combination.join(",")].join("|");
+        if (this._infoCache.has(key)) return this._infoCache.get(key);
         const pending = this._enqueueInfoRequest(async () => {
-            const result = await rpc("/website_sale/get_combination_info", {
-                product_template_id: templateId,
-                product_id: productId,
-                combination,
-                add_qty: qty,
-                uom_id: uomId,
+            // La tarifa se envía expresamente. No depende de cookies ni
+            // del estado de otra pestaña del navegador.
+            const response = await rpc("/yazbek/matrix/variants/batch", {
+                product_template_id: Number(templateId),
+                items: [{product_id: Number(productId), quantity: qty}],
+                pricelist_ids: [pricelistId],
             });
-            return {
-                price: Number(result?.price || 0),
-                freeQty: Number(result?.free_qty || 0),
-                cartQty: Number(result?.cart_qty || 0),
-                showAvailability: Boolean(result?.show_availability),
-                allowOutOfStock: Boolean(result?.allow_out_of_stock_order),
-                isStorable: Boolean(result?.is_storable),
-            };
-        });
-        // Todos los consumidores comparten una misma promesa, incluso si falla.
-        const shared = pending.then(info => {
-            if (this._infoCache.get(key) === shared) {
-                this._infoCache.set(key, info);
+            const info = response?.prices?.[String(pricelistId)]?.[String(productId)];
+            if (!info || response?.error) {
+                throw new Error(`Yazbek Matrix: no fue posible calcular ${productId}`);
             }
             return info;
+        });
+        const shared = pending.then(info => {
+            if (this._infoCache.get(key) === shared) this._infoCache.set(key, info);
+            return info;
         }, error => {
-            if (this._infoCache.get(key) === shared) {
-                this._infoCache.delete(key);
-            }
-            console.error("Yazbek Matrix: error obteniendo precio/stock", {
-                productId, uomId, quantity: qty, error,
-            });
+            if (this._infoCache.get(key) === shared) this._infoCache.delete(key);
+            console.error("Yazbek Matrix: error al calcular precio/stock", {productId, qty, error});
+            // A diferencia del código anterior, no inventar permiso de compra.
             return {
-                price: 0, freeQty: 0, cartQty: 0,
-                showAvailability: false, allowOutOfStock: false, isStorable: true,
+                price: 0, freeQty: 0, cartQty: 0, showAvailability: false,
+                allowOutOfStock: false, isStorable: true,
             };
         });
         this._infoCache.set(key, shared);
@@ -1307,6 +1224,7 @@ class YazbekVariantMatrix extends Interaction {
                 originalQuantity,
                 1
             );
+        const originalPricelistId = this._activePricelistId;
         const originalMode =
             mode;
         const originalUomId =
@@ -1321,6 +1239,9 @@ class YazbekVariantMatrix extends Interaction {
                 uomId,
                 queryQuantity
             );
+        if (this._activePricelistId !== originalPricelistId) {
+            return; // El usuario ya cambió de tarifa mientras respondía Odoo.
+        }
         if (
             input.dataset.saleMode !==
             originalMode

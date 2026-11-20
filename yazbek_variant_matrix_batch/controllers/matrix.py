@@ -58,11 +58,20 @@ class YazbekVariantMatrixBatch(Controller):
                 if not math.isfinite(ref_qty) or not (1 <= ref_qty <= 1000):
                     raise ValueError()
                 ref_qty_by_pl[pid] = ref_qty
-            product_ids = [int(row['product_id']) for row in items if isinstance(row, dict)]
-            if len(product_ids) != len(items) or len(set(product_ids)) != len(items) or any(
-                value <= 0 for value in product_ids
-            ):
-                raise ValueError()
+            # Solicitudes iniciales: quantity=1 por defecto.
+            # En una edición de cantidad: se consulta solo esa variante con
+            # la cantidad indicada y una tarifa explícita, sin tocar sesión.
+            product_ids = []
+            item_qty = {}
+            for row in items:
+                if not isinstance(row, dict):
+                    raise ValueError()
+                pid = int(row['product_id'])
+                qty = float(row.get('quantity', 1.0))
+                if pid <= 0 or pid in item_qty or not math.isfinite(qty) or not 1 <= qty <= 1000:
+                    raise ValueError()
+                product_ids.append(pid)
+                item_qty[pid] = qty
         except (ValueError, TypeError, KeyError):
             return {'error': 'invalid_request'}
 
@@ -144,13 +153,13 @@ class YazbekVariantMatrixBatch(Controller):
                         priced_product = product.with_context(**price_ctx)
                         result = template._get_additionnal_combination_info(
                             product_or_template=priced_product,
-                            quantity=1.0,
+                            quantity=item_qty[product_id],
                             uom=product.uom_id,
                             date=now,
                             website=web_ctx,
                         )
                         ref_qty = ref_qty_by_pl[pricelist.id]
-                        if ref_qty == 1:
+                        if ref_qty == item_qty[product_id]:
                             reference_price = float(result.get('price') or 0)
                         else:
                             # Precio de referencia para 12 piezas en Mayoreo:
