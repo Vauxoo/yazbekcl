@@ -1,6 +1,46 @@
-# Yazbek Matrix Batch v19.0.1.0.2 — Odoo 19 Enterprise
+# Yazbek Matrix Batch v19.0.1.2.0 — Odoo 19 Enterprise
 
-## Cambios de esta versión
+## Nuevo en v19.0.1.2.0: modalidad de compra por website
+- **Sitio web → Configuración → Ajustes → eCommerce → Venta en la matriz por**:
+  - **Solo unidades** (valor inicial, respeta el comportamiento anterior).
+  - **Solo cajas** (permite capturar cajas completas).
+  - **Unidades y cajas** (se muestran botones para que el comprador elija).
+- El ajuste queda guardado en cada `website`: México y Chile pueden tener configuraciones distintas. No modifica los ajustes de decimales ni disponibilidad anteriores.
+- **Piezas por caja**: se leen en el servidor desde el campo de la variante `product.product.x_studio_embalaje_variante` (o el del producto plantilla si la variante no define ese campo). Debe contener un número entero positivo, p. ej. `72`. Si falta o no es válido, la variante no puede comprarse en modo Cajas; no se inventa un embalaje de 1.
+- **Disponibilidad** en cajas = `floor(piezas disponibles / piezas por caja)`; las piezas sobrantes no cuentan como caja completa. Ejemplo: 150 piezas en variante de 72 pzas/caja = 2 cajas disponibles (sobran 6 piezas). Se respeta «Mostrar disponibilidad» para ocultar o mostrar cifras.
+- **Precio en matriz**: en Unidades se muestra precio por pieza; en Cajas se muestra precio por caja completa (precio unitario calculado por la tarifa vigente y cantidad física correspondiente, multiplicado por piezas/caja). La tarjeta «Desde» sigue expresando el precio por **pieza**, como antes.
+- **Carrito/ventas**: 2 cajas de 72 se envían como 144 **unidades base**. Odoo registra y calcula el pedido en piezas; no crea nuevas unidades de medida ni paquetes físicos. La tarifa Menudeo/Mayoreo usa el total real de piezas. Las ediciones posteriores en el carrito estándar siguen expresadas en piezas.
+- **Cambio de modo**: si el usuario había capturado cantidades, se solicita confirmación antes de reiniciarlas; evita que 2 unidades pasen a interpretarse automáticamente como 2 cajas.
+- Las cotizaciones, impuestos, envío, inventario, promociones y pagos no cambian. Las opciones Unidades/Cajas controlan la **interfaz de la matriz**; no son una restricción global para otras rutas del catálogo/carrito estándar.
+- El endpoint por lotes conserva el límite de 25 variantes y procesa ambos esquemas sin consultar 198 variantes individualmente. Al alternar modo se vuelven a consultar los lotes una vez para obtener el precio aplicable al empaque.
+
+### Pruebas obligatorias en staging
+1. Selecciona **Yazbek México**, cambia a «Unidades y cajas» y guarda. En la ficha con matriz comprueba que aparezcan ambos botones.
+2. Revisa una variante configurada con **72 piezas/caja** y, con disponibilidad de 150 piezas, comprueba «Disponible: 2 cajas». En Unidades muestra 150 unidades.
+3. Agrega 2 cajas: el carrito debe recibir **144 piezas** (no 2). Comprueba precios unitarios, subtotal, impuestos y tarifa Mayoreo.
+4. Prueba variantes con diferentes embalajes (p. ej. 18, 36, 72); comprueba también una variante **sin embalaje**, que no debe admitir cajas.
+5. Cambia la modalidad a «Solo cajas» y luego «Solo unidades»; prueba que la otra opción no aparezca en la matriz.
+6. Selecciona **Yazbek Chile** y usa una modalidad diferente; verifica que México no cambie. Prueba las dos casillas previas de precios/stock.
+7. En Network valida lotes (`/yazbek/matrix/variants/batch`) y que no aparezcan errores JS ni 500.
+8. Prueba el carrito, envío y checkout completos con una cuenta de prueba. **No subir a producción sin completar estas pruebas.**
+
+## Cambios anteriores (v19.0.1.1.0)
+- Se agregan dos checkboxes independientes por sitio web en **Sitio web → Configuración → Ajustes → eCommerce**. Seleccionar arriba **Yazbek México** o **Yazbek Chile**, cambiar las opciones y Guardar.
+- **Precio con decimales**: activado = mostrar dos decimales; desactivado = mostrar precios enteros, redondeados para su **visualización**. Abarca los importes monetarios estándar del sitio (catálogo, página del producto, carrito y checkout) y los precios de la matriz personalizada. No altera el valor unitario real ni el redondeo de impuestos, entregas, cobros o facturas.
+- **Mostrar disponibilidad de producto**: activado = dejar visible la información de disponibilidad que ya ofrece Odoo en cada producto; desactivado = ocultar las cantidades disponibles mostradas por `website_sale_stock` y la matriz personalizada. La comprobación y restricciones de existencias **siguen activas**; se conservan avisos de producto agotado y la opción de aviso de reposición de Odoo.
+- Los ajustes se guardan **en el registro `website`**, no como configuración general de la empresa; cada web puede tener su combinación de opciones.
+- Inicialmente ambas casillas estarán marcadas en los sitios existentes, para mantener el comportamiento de México. **Revisa Chile**: si deseas conservar precios enteros CLP, desmarca allí «Precio con decimales».
+- No se realizan llamadas extra al servidor. El formato decimal también se actualiza cuando el precio cambia de forma dinámica.
+
+## Instalación de la nueva versión
+1. Reemplaza la carpeta antigua `yazbek_variant_matrix_batch` por esta carpeta, respetando el nombre técnico.
+2. Despliega en una rama de **staging** de Odoo.sh.
+3. En Odoo (modo desarrollador), abre Apps y pulsa **Actualizar** sobre «Yazbek - Matriz de variantes por lotes».
+4. Ve a **Sitio web → Configuración → Ajustes**, selecciona el website desde el selector superior, marca las dos opciones a tu gusto y pulsa **Guardar**. Repite en cada sitio web.
+5. Recarga las páginas públicas con `Ctrl+Shift+R`; comprueba el catálogo, una ficha con matriz, carrito y checkout, con ambos estados activado/desactivado.
+6. Valida especialmente que los importes finales, impuestos y stock se calculen igual con ambas presentaciones. No instalar directamente en producción sin completar estas pruebas.
+
+## Cambios de la base v19.0.1.0.2
 - 198 variantes se cargan mediante 8 solicitudes JSON-RPC de hasta 25 productos (dos tarifas).
 - El JavaScript **no** llama `/shop/change_pricelist` en la carga de la cuadrícula o al escribir cantidades.
 - Las cantidades editadas consultan `/yazbek/matrix/variants/batch` con `quantity`, tarifa y producto explícitos.

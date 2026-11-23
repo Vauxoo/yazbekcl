@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="website_layout_yazbek_display" inherit_id="website.layout" name="Yazbek: opciones visuales del sitio">
+        <xpath expr="//t[@t-set='html_data']" position="after">
+            <t t-set="nothing" t-value="html_data.update({
+                'data-yazbek-matrix-sale-mode': website.yazbek_matrix_sale_mode,
+                'data-yazbek-price-decimals': '1' if website.yazbek_price_decimals else '0',
+                'data-yazbek-show-availability': '1' if website.yazbek_show_availability else '0',
+                'data-yazbek-currency': website.currency_id.name,
+                'data-yazbek-locale': website.default_lang_id.code.replace('_', '-') if website.default_lang_id else 'es-MX',
+            })"/>
+        </xpath>
+    </template>
+</odoo>
