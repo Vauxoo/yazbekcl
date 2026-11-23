@@ -7,6 +7,7 @@ No se selecciona ni persiste una tarifa alternativa en la sesión web.
 
 import logging
 import math
+import re
 
 from odoo import fields
 from odoo.fields import Domain
@@ -21,19 +22,54 @@ MAX_PRICELISTS = 2
 
 class YazbekVariantMatrixBatch(Controller):
 
+    @staticmethod
+    def _get_variant_pack_units(product):
+        """Piezas enteras por caja, obtenidas del dato de la variante, no de JS.
+
+        El campo Studio puede ser Integer, Float, Char o Many2one.
+        No inventar un tamaño de caja si no está configurado.
+        """
+        record = product
+        if 'x_studio_embalaje_variante' not in record._fields:
+            record = product.product_tmpl_id
+        if 'x_studio_embalaje_variante' not in record._fields:
+            return 0
+        value = record['x_studio_embalaje_variante']
+        if not value:
+            return 0
+        if hasattr(value, 'qty'):
+            value = value.qty
+        elif hasattr(value, 'display_name'):
+            value = value.display_name
+        if isinstance(value, str):
+            match = re.search(r'\d+(?:[.,]\d+)?', value)
+            if not match:
+                return 0
+            value = match.group(0).replace(',', '.')
+        try:
+            units = float(value)
+        except (ValueError, TypeError):
+            return 0
+        if not math.isfinite(units) or units < 1 or units > 1000:
+            return 0
+        return int(units) if units.is_integer() else 0
+
     @route(
         '/yazbek/matrix/variants/batch',
         type='jsonrpc', auth='public', methods=['POST'],
         website=True, readonly=True,
     )
     def get_variants_batch(self, product_template_id=None, items=None,
-                           pricelist_ids=None, reference_quantities=None, **kwargs):
+                           pricelist_ids=None, reference_quantities=None,
+                           quantity_mode='units', **kwargs):
         """Recibe hasta 25 variantes y 1-2 tarifas; responde solo datos de venta.
 
         No acepta lista de precios arbitraria: debe estar disponible en el
         website actual o ser la lista efectiva del visitante.
         """
         try:
+            if quantity_mode not in ('units', 'boxes'):
+                raise ValueError()
             template_id = int(product_template_id or 0)
             if template_id <= 0:
                 raise ValueError()
@@ -68,7 +104,7 @@ class YazbekVariantMatrixBatch(Controller):
                     raise ValueError()
                 pid = int(row['product_id'])
                 qty = float(row.get('quantity', 1.0))
-                if pid <= 0 or pid in item_qty or not math.isfinite(qty) or not 1 <= qty <= 1000:
+                if pid <= 0 or pid in item_qty or not math.isfinite(qty) or not 1 <= qty <= 100000:
                     raise ValueError()
                 product_ids.append(pid)
                 item_qty[pid] = qty
@@ -76,6 +112,8 @@ class YazbekVariantMatrixBatch(Controller):
             return {'error': 'invalid_request'}
 
         website = request.website
+        if quantity_mode == 'boxes' and website.yazbek_matrix_sale_mode == 'units':
+            return {'error': 'mode_not_enabled'}
         # No exponer productos de otros sitios/empresas, ni no publicados.
         domain = Domain.AND([
             website.sale_product_domain(),
@@ -145,6 +183,20 @@ class YazbekVariantMatrixBatch(Controller):
                         }
                         continue
                     try:
+                        pack_units = self._get_variant_pack_units(product)
+                        if quantity_mode == 'boxes' and not pack_units:
+                            output[str(product_id)] = {
+                                'referencePrice': 0, 'price': 0,
+                                'freeQty': 0, 'cartQty': 0,
+                                'showAvailability': False,
+                                'allowOutOfStock': False, 'isStorable': True,
+                                'packagingUnits': 0, 'quotedQty': 0,
+                            }
+                            continue
+                        quote_qty = (
+                            pack_units if quantity_mode == 'boxes'
+                            else item_qty[product_id]
+                        )
                         # Equivale a la porción de precio y stock de
                         # template._get_combination_info() de Odoo 19,
                         # sin recrear variantes, imágenes, etiquetas, etc.
@@ -153,13 +205,13 @@ class YazbekVariantMatrixBatch(Controller):
                         priced_product = product.with_context(**price_ctx)
                         result = template._get_additionnal_combination_info(
                             product_or_template=priced_product,
-                            quantity=item_qty[product_id],
+                            quantity=quote_qty,
                             uom=product.uom_id,
                             date=now,
                             website=web_ctx,
                         )
                         ref_qty = ref_qty_by_pl[pricelist.id]
-                        if ref_qty == item_qty[product_id]:
+                        if ref_qty == quote_qty:
                             reference_price = float(result.get('price') or 0)
                         else:
                             # Precio de referencia para 12 piezas en Mayoreo:
@@ -180,6 +232,8 @@ class YazbekVariantMatrixBatch(Controller):
                             'showAvailability': bool(result.get('show_availability')),
                             'allowOutOfStock': bool(result.get('allow_out_of_stock_order')),
                             'isStorable': bool(result.get('is_storable')),
+                            'packagingUnits': pack_units,
+                            'quotedQty': quote_qty,
                         }
                     except (AccessError, ValidationError):
                         _logger.exception('Yazbek matrix: no se pudo calcular %s', product_id)
