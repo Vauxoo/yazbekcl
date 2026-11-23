@@ -22,6 +22,18 @@ class YazbekVariantMatrix extends Interaction {
         this._dirtyInputs = new Set();
         this._matrixLoadInProgress = false;
         this._matrixInfoLoadedPricelistId = 0;
+        // Estas dos opciones provienen del website activo (no de la compañía global).
+        const websiteFlags = document.documentElement.dataset;
+        this._matrixModeSetting = ["units", "boxes", "both"].includes(
+            websiteFlags.yazbekMatrixSaleMode
+        ) ? websiteFlags.yazbekMatrixSaleMode : "units";
+        this._saleMode = this._matrixModeSetting === "boxes" ? "boxes" : "units";
+        this._batchPriceMode = null;
+        this._modeSwitchInProgress = false;
+        this._showWebsiteAvailability = websiteFlags.yazbekShowAvailability !== "0";
+        this._showWebsitePriceDecimals = websiteFlags.yazbekPriceDecimals !== "0";
+        this._websiteCurrency = websiteFlags.yazbekCurrency || "MXN";
+        this._websiteLocale = websiteFlags.yazbekLocale || "es-MX";
         this._pricingConfig = this._readPricingConfig();
         this._activePricelistId = 0;
         this._pricingTimer = null;
@@ -102,17 +114,16 @@ class YazbekVariantMatrix extends Interaction {
         }
     }
     _formatPrice(value) {
+        const decimals = this._showWebsitePriceDecimals ? 2 : 0;
         return new Intl.NumberFormat(
-            "es-MX",
+            this._websiteLocale,
             {
                 style: "currency",
-                currency: "MXN",
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
+                currency: this._websiteCurrency,
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
             }
-        ).format(
-            Number(value || 0)
-        );
+        ).format(Number(value || 0));
     }
     _formatStock(value) {
         const qty =
@@ -251,19 +262,99 @@ class YazbekVariantMatrix extends Interaction {
         }
     }
     _getPackagingUnits(packagingName) {
-        const match =
-            String(packagingName || "")
-                .match(/\d+(?:[.,]\d+)?/);
-        if (!match) {
-            return 1;
+        // El HTML es una pista para mostrar el empaque; el servidor valida
+        // x_studio_embalaje_variante en la primera respuesta por lotes.
+        const match = String(packagingName || "").match(/\d+(?:[.,]\d+)?/);
+        if (!match) return 0;
+        const units = Number(match[0].replace(",", "."));
+        return Number.isSafeInteger(units) && units > 0 ? units : 0;
+    }
+    _getBaseUnitFactor(input) {
+        return input.dataset.saleMode === "boxes"
+            ? Number(input.dataset.packagingUnits || 0) : 1;
+    }
+    _getAvailableModeQty(input, availableBaseUnits = null) {
+        const remaining = Math.max(0, Number(
+            availableBaseUnits ?? input.dataset.availableQty ?? 0
+        ));
+        const factor = this._getBaseUnitFactor(input);
+        return factor > 0 ? Math.max(0, Math.floor((remaining + 1e-8) / factor)) : 0;
+    }
+    _updateModeLabel(input) {
+        const label = input.closest("td")?.querySelector(".yazbek-matrix-uom");
+        if (!label) return;
+        const pack = Number(input.dataset.packagingUnits || 0);
+        label.textContent = input.dataset.saleMode === "boxes"
+            ? (pack > 0 ? `Caja (${pack} pzas.)` : "Sin embalaje configurado")
+            : "Unidades";
+    }
+    _showStockForInput(input, availableBaseUnits, showAvailability) {
+        const label = input.closest("td")?.querySelector(".yazbek-matrix-stock");
+        if (!label) return;
+        const stockMode = this._getAvailableModeQty(input, availableBaseUnits);
+        label.classList.remove("text-danger", "text-success", "text-muted");
+        if (!this._showWebsiteAvailability || !showAvailability) {
+            label.textContent = "";
+            label.style.display = "none";
+            return;
         }
-        const value =
-            Number(
-                match[0].replace(",", ".")
-            );
-        return Number.isFinite(value) && value > 0
-            ? value
-            : 1;
+        label.style.display = "";
+        const suffix = input.dataset.saleMode === "boxes" ? "cajas" : "unidades";
+        label.textContent = `Disponible: ${this._formatStock(stockMode)} ${suffix}`;
+        label.classList.add(stockMode > 0 ? "text-success" : "text-muted");
+    }
+    async _switchSaleMode(mode, wrapper, templateId, updateSummary) {
+        if (this._modeSwitchInProgress || mode === this._saleMode) return;
+        const inputs = [...wrapper.querySelectorAll(".yazbek-matrix-qty")];
+        const hasSelection = inputs.some(input => Number(input.value || 0) > 0);
+        if (hasSelection && !window.confirm(
+            "Al cambiar entre Unidades y Cajas se reiniciarán las cantidades seleccionadas. ¿Continuar?"
+        )) return;
+        this._modeSwitchInProgress = true;
+        // No descartar una carga por lotes que aún esté ejecutándose.
+        if (this._batchPromise) {
+            try { await this._batchPromise; } catch (_error) { /* Se recargará el lote. */ }
+        }
+        for (const button of wrapper.querySelectorAll(".yazbek-matrix-mode-button")) {
+            button.disabled = true;
+        }
+        if (this._pricingTimer) clearTimeout(this._pricingTimer);
+        this._pricingTimer = null;
+        for (const timer of this._infoTimers.values()) clearTimeout(timer);
+        this._infoTimers.clear();
+        this._dirtyInputs.clear();
+        this._saleMode = mode;
+        this._batchPriceMode = null;
+        this._batchTemplateId = 0;
+        this._batchPrices.clear();
+        this._referencePriceCache.clear();
+        for (const input of inputs) {
+            input.value = "0";
+            input.dataset.saleMode = mode;
+            input.dataset.priceAvailable = "0";
+            input.disabled = true;
+            this._updateModeLabel(input);
+        }
+        this._updateModeButtons(wrapper);
+        updateSummary();
+        try {
+            await this._applyPricingForSelection(wrapper, templateId, {reloadAll: true});
+        } catch (error) {
+            console.error("Yazbek Matrix: no se pudo cargar el modo", mode, error);
+        } finally {
+            this._modeSwitchInProgress = false;
+            for (const button of wrapper.querySelectorAll(".yazbek-matrix-mode-button")) {
+                button.disabled = false;
+            }
+        }
+    }
+    _updateModeButtons(wrapper) {
+        for (const button of wrapper.querySelectorAll(".yazbek-matrix-mode-button")) {
+            const active = button.dataset.mode === this._saleMode;
+            button.classList.toggle("btn-primary", active);
+            button.classList.toggle("btn-outline-primary", !active);
+            button.setAttribute("aria-pressed", active ? "true" : "false");
+        }
     }
     _getSelectionBaseUnits(wrapper) {
         let total = 0;
@@ -286,21 +377,9 @@ class YazbekVariantMatrix extends Interaction {
             if (qty <= 0) {
                 continue;
             }
-            const mode =
-                input.dataset.saleMode ||
-                "units";
-            const unitsPerQty =
-                mode === "boxes"
-                    ? Math.max(
-                        Number(
-                            input.dataset.packagingUnits ||
-                            1
-                        ),
-                        1
-                    )
-                    : 1;
-            total +=
-                qty * unitsPerQty;
+            const unitsPerQty = this._getBaseUnitFactor(input);
+            if (!Number.isSafeInteger(unitsPerQty) || unitsPerQty < 1) continue;
+            total += qty * unitsPerQty;
         }
         return total;
     }
@@ -801,9 +880,10 @@ class YazbekVariantMatrix extends Interaction {
             throw new Error("Yazbek Matrix: tarifa activa inválida");
         }
         // La carga inicial de cada variante se resuelve sin nuevos HTTP.
-        if (qty === 1 && this._batchTemplateId === Number(templateId)) {
+        if (this._batchTemplateId === Number(templateId) &&
+            this._batchPriceMode === this._saleMode) {
             const cached = this._batchPrices.get(pricelistId)?.get(Number(productId));
-            if (cached) return cached;
+            if (cached && Number(cached.quotedQty || 0) === qty) return cached;
         }
         const combination = Array.isArray(ptavIds) ? [...ptavIds].sort((a, b) => a-b) : [];
         const key = [templateId, pricelistId, productId, uomId, qty, combination.join(",")].join("|");
@@ -900,73 +980,21 @@ class YazbekVariantMatrix extends Interaction {
             );
         input.dataset.availableQty =
             String(remaining);
-        if (
-            input.dataset.stockLimited === "1"
-        ) {
-            input.max =
-                String(
-                    Math.max(
-                        Math.floor(remaining),
-                        0
-                    )
-                );
+        this._showStockForInput(input, remaining, showAvailability);
+        if (input.dataset.stockLimited === "1") {
+            input.max = String(this._getAvailableModeQty(input, remaining));
         }
-        const stockElement =
-            cell.querySelector(
-                ".yazbek-matrix-stock"
-            );
-        if (stockElement) {
-            stockElement.classList.remove(
-                "text-danger",
-                "text-success",
-                "text-muted"
-            );
-            if (!showAvailability) {
-                stockElement.textContent = "";
-                stockElement.style.display = "none";
-            } else if (
-                !allowOutOfStock &&
-                remaining <= 0
-            ) {
-                stockElement.style.display = "";
-                stockElement.textContent =
-                    "";
-                stockElement.classList.add(
-                    "text-danger"
-                );
-            } else {
-                stockElement.style.display = "";
-                stockElement.textContent =
-                    `Disponible: ${this._formatStock(remaining)}`;
-                stockElement.classList.add(
-                    remaining > 0
-                        ? "text-success"
-                        : "text-muted"
-                );
-            }
-        }
-        if (
-            !allowOutOfStock &&
-            remaining <= 0
-        ) {
+        const canBuy = allowOutOfStock ||
+            this._getAvailableModeQty(input, remaining) > 0;
+        if (!canBuy) {
             input.value = "0";
             input.disabled = true;
-            input.dataset.stockCanSell =
-                "0";
-            this._setCellUnavailable(
-                cell,
-                true
-            );
-        } else if (
-            input.dataset.priceAvailable === "1"
-        ) {
+            input.dataset.stockCanSell = "0";
+            this._setCellUnavailable(cell, true);
+        } else if (input.dataset.priceAvailable === "1") {
             input.disabled = false;
-            input.dataset.stockCanSell =
-                "1";
-            this._setCellUnavailable(
-                cell,
-                false
-            );
+            input.dataset.stockCanSell = "1";
+            this._setCellUnavailable(cell, false);
         }
     }
     _setCellUnavailable(
@@ -985,68 +1013,15 @@ class YazbekVariantMatrix extends Interaction {
             unavailable
         );
     }
-    _renderStock(
-        input,
-        info
-    ) {
-        const cell =
-            input.closest("td");
-        const stockElement =
-            cell?.querySelector(
-                ".yazbek-matrix-stock"
-            );
-        if (!stockElement) {
-            return;
-        }
-        stockElement.classList.remove(
-            "text-danger",
-            "text-success",
-            "text-muted"
-        );
+    _renderStock(input, info) {
+        const label = input.closest("td")?.querySelector(".yazbek-matrix-stock");
+        if (!label) return;
         if (!info.isStorable) {
-            stockElement.textContent =
-                "";
-            stockElement.style.display =
-                "none";
+            label.textContent = "";
+            label.style.display = "none";
             return;
         }
-        const remaining =
-            this._getRemainingStock(
-                info
-            );
-        if (
-            !info.allowOutOfStock &&
-            remaining <= 0
-        ) {
-            stockElement.style.display =
-                "";
-            stockElement.textContent =
-                "";
-            stockElement.classList.add(
-                "text-danger"
-            );
-            return;
-        }
-        if (!info.showAvailability) {
-            stockElement.textContent =
-                "";
-            stockElement.style.display =
-                "none";
-            return;
-        }
-        stockElement.style.display =
-            "";
-        const qtyText =
-            this._formatStock(
-                remaining
-            );
-        stockElement.textContent =
-            `Disponible: ${qtyText}`;
-        stockElement.classList.add(
-            remaining > 0
-                ? "text-success"
-                : "text-muted"
-        );
+        this._showStockForInput(input, this._getRemainingStock(info), info.showAvailability);
     }
     _applyStockRule(
         input,
@@ -1070,6 +1045,15 @@ class YazbekVariantMatrix extends Interaction {
             this._getRemainingStock(
                 info
             );
+        if (input.dataset.saleMode === "boxes" &&
+            this._getBaseUnitFactor(input) <= 0) {
+            input.dataset.stockCanSell = "0";
+            input.dataset.stockLimited = "0";
+            input.value = "0";
+            input.disabled = true;
+            this._setCellUnavailable(cell, true);
+            return false;
+        }
         input.dataset.availableQty =
             String(
                 remaining
@@ -1092,16 +1076,9 @@ class YazbekVariantMatrix extends Interaction {
         }
         input.dataset.stockLimited =
             "1";
-        input.max =
-            String(
-                Math.max(
-                    Math.floor(
-                        remaining
-                    ),
-                    0
-                )
-            );
-        if (remaining <= 0) {
+        const availableMode = this._getAvailableModeQty(input, remaining);
+        input.max = String(availableMode);
+        if (availableMode <= 0) {
             input.value =
                 "0";
             input.disabled =
@@ -1127,14 +1104,7 @@ class YazbekVariantMatrix extends Interaction {
         ) {
             return;
         }
-        const available =
-            Math.max(
-                Number(
-                    input.dataset.availableQty ||
-                    0
-                ),
-                0
-            );
+        const available = this._getAvailableModeQty(input);
         let qty =
             Number(
                 input.value || 0
@@ -1219,11 +1189,20 @@ class YazbekVariantMatrix extends Interaction {
             Number(
                 input.value || 0
             );
-        const queryQuantity =
-            Math.max(
-                originalQuantity,
-                1
-            );
+        const factor = this._getBaseUnitFactor(input);
+        if (factor <= 0) {
+            priceElement.textContent = "—";
+            input.value = "0";
+            input.disabled = true;
+            input.dataset.priceAvailable = "0";
+            input.dataset.stockCanSell = "0";
+            cell.dataset.priceLoaded = "1";
+            cell.dataset.hasPrice = "0";
+            cell.dataset.referenceUnitPrice = "";
+            this._updateModeLabel(input);
+            return;
+        }
+        const queryQuantity = Math.max(originalQuantity, 1) * factor;
         const originalPricelistId = this._activePricelistId;
         const originalMode =
             mode;
@@ -1276,22 +1255,9 @@ class YazbekVariantMatrix extends Interaction {
                 ? "1"
                 : "0";
         if (hasPrice) {
-            priceElement.textContent =
-                this._formatPrice(
-                    info.price
-                );
+            priceElement.textContent = this._formatPrice(info.price * factor);
 
-            const referenceUnitPrice =
-                mode === "boxes"
-                    ? info.price /
-                        Math.max(
-                            Number(
-                                input.dataset.packagingUnits ||
-                                1
-                            ),
-                            1
-                        )
-                    : info.price;
+            const referenceUnitPrice = info.price;
 
             cell.dataset.referenceUnitPrice =
                 String(
@@ -1429,7 +1395,8 @@ class YazbekVariantMatrix extends Interaction {
     // Se realiza UNA carga HTTP por cada 25 variantes (para ambas tarifas).
     // Los cambios posteriores de lista leen la memoria local de la página.
     async _ensureBatchPrices(wrapper, templateId) {
-        if (this._batchTemplateId === templateId && this._batchPrices.size) {
+        if (this._batchTemplateId === templateId && this._batchPrices.size &&
+            this._batchPriceMode === this._saleMode) {
             return;
         }
         if (this._batchPromise) {
@@ -1472,6 +1439,7 @@ class YazbekVariantMatrix extends Interaction {
                         product_template_id: templateId,
                         items: chunk,
                         pricelist_ids: pricelistIds,
+                        quantity_mode: this._saleMode,
                         // La tarjeta «Desde» de Mayoreo replica la vista QWeb:
                         // se calcula con 12 piezas, sin alterar el precio de
                         // cada celda (calculado con cantidad 1 inicialmente).
@@ -1507,6 +1475,7 @@ class YazbekVariantMatrix extends Interaction {
             ));
             if (this._destroyed) return;
             this._batchTemplateId = templateId;
+            this._batchPriceMode = this._saleMode;
             this._batchPrices = full;
             this._referencePriceCache.clear();
             for (const plId of pricelistIds) {
@@ -1560,6 +1529,11 @@ class YazbekVariantMatrix extends Interaction {
                     input.disabled = true;
                     return;
                 }
+                const productInfo = cached.get(productId);
+                // Solo confiar en las piezas/caja validadas en el servidor.
+                input.dataset.packagingUnits = String(productInfo.packagingUnits || 0);
+                input.dataset.saleMode = this._saleMode;
+                this._updateModeLabel(input);
                 await this._refreshCellInfo(input, templateId);
             }));
             this._matrixInfoLoadedPricelistId = this._activePricelistId;
@@ -2045,28 +2019,32 @@ class YazbekVariantMatrix extends Interaction {
         wrapper.appendChild(
             pricingStatus
         );
-        // La matriz opera exclusivamente con unidades, incluso para
-        // clientes con lista de precios especial.
-        const modeWrapper =
-            document.createElement(
-                "div"
+        const modeWrapper = document.createElement("div");
+        modeWrapper.className = "btn-group mb-3";
+        modeWrapper.setAttribute("role", "group");
+        modeWrapper.setAttribute("aria-label", "Modo de compra");
+        const modes = this._matrixModeSetting === "both"
+            ? ["units", "boxes"]
+            : [this._saleMode];
+        for (const mode of modes) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.mode = mode;
+            button.className = "btn yazbek-matrix-mode-button";
+            button.textContent = mode === "boxes" ? "Cajas" : "Unidades";
+            button.addEventListener("click", () =>
+                this._switchSaleMode(mode, wrapper, templateId, updateSummary)
             );
-        modeWrapper.className =
-            "btn-group mb-3";
-        const unitsLabel =
-            document.createElement(
-                "span"
-            );
-        unitsLabel.className =
-            "btn btn-primary";
-        unitsLabel.textContent =
-            "Unidades";
-        modeWrapper.appendChild(
-            unitsLabel
-        );
-        wrapper.appendChild(
-            modeWrapper
-        );
+            modeWrapper.appendChild(button);
+        }
+        wrapper.appendChild(modeWrapper);
+        this._updateModeButtons(wrapper);
+        if (this._matrixModeSetting === "both") {
+            const hint = document.createElement("div");
+            hint.className = "small text-muted mb-2";
+            hint.textContent = "En Cajas solo se permiten cajas completas; las piezas por caja dependen de cada talla y color.";
+            wrapper.appendChild(hint);
+        }
         const responsive =
             document.createElement(
                 "div"
@@ -2282,8 +2260,7 @@ class YazbekVariantMatrix extends Interaction {
                     document.createElement(
                         "td"
                     );
-                cell.style.minWidth =
-                    "95px";
+                cell.style.minWidth = "118px";
                 const key =
                     `${size.id}_${color.id}`;
                 const variant =
@@ -2347,8 +2324,7 @@ class YazbekVariantMatrix extends Interaction {
                             variant.packagingName
                         )
                     );
-                input.dataset.saleMode =
-                    "units";
+                input.dataset.saleMode = this._saleMode;
                 input.dataset.currentUomId =
                     String(
                         variant.baseUomId ||
@@ -2375,8 +2351,8 @@ class YazbekVariantMatrix extends Interaction {
                         variant.packagingId ||
                         0
                     );
-                uomText.textContent =
-                    "Unidades";
+                uomText.textContent = "Unidades";
+                this._updateModeLabel(input);
                 cell.appendChild(
                     uomText
                 );
@@ -2386,8 +2362,8 @@ class YazbekVariantMatrix extends Interaction {
                     );
                 priceText.className =
                     "d-block fw-semibold mt-1 yazbek-matrix-price";
-                priceText.textContent =
-                    "…";
+                priceText.textContent = "…";
+                priceText.style.whiteSpace = "nowrap";
                 cell.appendChild(
                     priceText
                 );
@@ -2466,8 +2442,12 @@ class YazbekVariantMatrix extends Interaction {
                             0
                         );
                 }
-                summary.textContent =
-                    `Total: ${total} unidades`;
+                if (this._saleMode === "boxes") {
+                    const baseUnits = this._getSelectionBaseUnits(wrapper);
+                    summary.textContent = `Total: ${total} cajas · ${this._formatStock(baseUnits)} piezas`;
+                } else {
+                    summary.textContent = `Total: ${total} unidades`;
+                }
             };
         wrapper.addEventListener(
             "input",
@@ -2489,6 +2469,7 @@ class YazbekVariantMatrix extends Interaction {
         cartButton.addEventListener(
             "click",
             async () => {
+                if (this._modeSwitchInProgress || this._matrixLoadInProgress) return;
                 const selection =
                     [];
                 const inputs =
@@ -2505,6 +2486,7 @@ class YazbekVariantMatrix extends Interaction {
                         );
                     if (
                         qty <= 0 ||
+                        !Number.isSafeInteger(qty) ||
                         input.disabled ||
                         input.dataset.priceAvailable !== "1" ||
                         input.dataset.stockCanSell === "0"
@@ -2525,6 +2507,10 @@ class YazbekVariantMatrix extends Interaction {
                     ) {
                         continue;
                     }
+                    if (qty * this._getBaseUnitFactor(input) > 100000) {
+                        alert("La selección supera 100,000 piezas por variante. Divide el pedido.");
+                        return;
+                    }
                     if (
                         input.dataset.stockLimited === "1"
                     ) {
@@ -2532,23 +2518,19 @@ class YazbekVariantMatrix extends Interaction {
                             Number(
                                 input.dataset.availableQty || 0
                             );
-                        if (qty > available) {
+                        const availableMode = this._getAvailableModeQty(input, available);
+                        if (qty > availableMode) {
                             alert(
-                                `Solo hay ${this._formatStock(available)} disponibles para esta variante.`
+                                `Solo hay ${this._formatStock(availableMode)} disponibles para esta variante.`
                             );
                             return;
                         }
                     }
-                    const unitsPerQty =
-                        input.dataset.saleMode === "boxes"
-                            ? Math.max(
-                                Number(
-                                    input.dataset.packagingUnits ||
-                                    1
-                                ),
-                                1
-                            )
-                            : 1;
+                    const unitsPerQty = this._getBaseUnitFactor(input);
+                    if (!Number.isSafeInteger(unitsPerQty) || unitsPerQty <= 0) {
+                        alert("La variante no tiene piezas por caja configuradas.");
+                        return;
+                    }
                     selection.push({
                         productId,
                         uomId,
@@ -2605,7 +2587,7 @@ class YazbekVariantMatrix extends Interaction {
                                     product_id:
                                         item.productId,
                                     quantity:
-                                        item.qty,
+                                        item.baseUnits,
                                     uom_id:
                                         item.uomId,
                                     product_custom_attribute_values:
@@ -2628,7 +2610,7 @@ class YazbekVariantMatrix extends Interaction {
                         );
                         this._applyLocalCartDelta(
                             item.input,
-                            item.qty
+                            item.baseUnits
                         );
                         item.input.value =
                             "0";

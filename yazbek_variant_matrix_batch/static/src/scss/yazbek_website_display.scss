@@ -1,0 +1,8 @@
+/* Ocultar cantidades visibles, no la validación de stock ni alertas de agotado. */
+html[data-yazbek-show-availability="0"] {
+    .yazbek-matrix-stock,
+    #product_stock_availability #threshold_message,
+    .availability_messages #threshold_message {
+        display: none !important;
+    }
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_yazbek_display" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.yazbek.display</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="website_sale_stock.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//setting[@id='product_availability_setting']" position="after">
+                <setting id="yazbek_price_decimals_setting"
+                         string="Precio con decimales"
+                         help="Mostrar dos decimales o precios enteros en las páginas de tienda de este sitio. No modifica los importes reales.">
+                    <field name="yazbek_price_decimals"/>
+                </setting>
+                <setting id="yazbek_matrix_sale_mode_setting"
+                         string="Venta en la matriz por"
+                         help="Define si los compradores pueden seleccionar Unidades, Cajas o ambos formatos en la matriz de variantes de este sitio web. Las cajas requieren piezas por caja en cada variante.">
+                    <field name="yazbek_matrix_sale_mode" widget="radio"/>
+                </setting>
+                <setting id="yazbek_show_availability_setting"
+                         string="Mostrar disponibilidad de producto"
+                         help="Mostrar las cantidades disponibles al cliente en este sitio. Se siguen aplicando todas las restricciones de inventario.">
+                    <field name="yazbek_show_availability"/>
+                </setting>
+            </xpath>
+        </field>
+    </record>
+</odoo>
