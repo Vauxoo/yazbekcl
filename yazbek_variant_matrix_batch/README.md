@@ -1,4 +1,14 @@
-# Yazbek Matrix Batch v19.0.1.2.0 — Odoo 19 Enterprise
+# Yazbek Matrix Batch v19.0.1.2.1 — Odoo 19 Enterprise
+
+## Nuevo en v19.0.1.2.1: Menudeo/Mayoreo sin restricción de país
+- La tarifa del **carrito web** se determina por la suma de **piezas reales**, sin importar el país de la empresa del sitio (México, Chile u otro).
+- Aplica solamente a carritos web (`draft`/`sent`) que dispongan de listas **Menudeo** y **Mayoreo** válidas para el sitio y su compañía; no cambia pedidos de empresas o sitios sin esas listas.
+- El umbral se mantiene en **12 piezas**; se suman todas las líneas de productos, excluyendo envío y líneas de presentación.
+- Cuando la matriz vende **Cajas**, convierte primero cada caja a sus piezas base antes de enviar al carrito. Ejemplo: **1 caja de 72 = 72 piezas → Mayoreo**.
+- Para evitar recálculos redundantes, Odoo recalcula los precios de todas las líneas **solo cuando cambia la lista de precios**. Se conserva la excepción para tarifas especiales «Descuento 14 %».
+- La lógica se ejecuta desde el controlador estándar del carrito de `website_sale`: agregar, cambiar cantidad o eliminar una línea. No depende de la automatización Studio.
+- **Desactivar en staging** la acción automática `WEB - Recalcular tarifa al cambiar cantidad` antes de probar, pues mantenerla en paralelo puede provocar recálculos duplicados.
+- Validar al menos: 11 piezas → Menudeo; 12 piezas → Mayoreo; 1 caja de 72 → Mayoreo; eliminación de línea hasta quedar en menos de 12 → Menudeo; tarifas por website y empresa; no afectar las tarifas especiales.
 
 ## Nuevo en v19.0.1.2.0: modalidad de compra por website
 - **Sitio web → Configuración → Ajustes → eCommerce → Venta en la matriz por**:
@@ -45,9 +55,9 @@
 - El JavaScript **no** llama `/shop/change_pricelist` en la carga de la cuadrícula o al escribir cantidades.
 - Las cantidades editadas consultan `/yazbek/matrix/variants/batch` con `quantity`, tarifa y producto explícitos.
 - La tarjeta «Desde»: Menudeo (1 pieza) / Mayoreo (12 piezas); no sobreescribe el precio de 12 con precios de celda de 1.
-- Se añade `models/sale_order.py`: al terminar de agregar/modificar/quitar líneas de un carrito web de compañía mexicana, Odoo recalcula la tarifa según el total acumulado en unidades base, y **recalcula todas las líneas solo si la tarifa cambia**. Sin acciones automáticas en cada línea.
+- Se añade `models/sale_order.py`: al terminar de agregar/modificar/quitar líneas de un carrito web, Odoo recalcula la tarifa según el total acumulado en unidades base y **recalcula todas las líneas solo si la tarifa cambia**. Desde v19.0.1.2.1 aplica sin filtro de país.
 - Conserva el tratamiento especial «Descuento 14 %».
-- No aplica al sitio de Chile (filtro de compañía del sitio con código `MX`).
+- **Actualizado en v19.0.1.2.1:** también aplica a Chile y a cualquier país con tarifas Menudeo/Mayoreo válidas.
 
 ## PASOS IMPORTANTES EN STAGING
 1. Sustituye la carpeta anterior `yazbek_variant_matrix_batch` por la de este ZIP, sin dejar dos versiones del módulo.
@@ -58,7 +68,7 @@
 6. Comprueba Network: `/yazbek/matrix/variants/batch` ~8 iniciales y **0** solicitudes de `/shop/change_pricelist` procedentes de esta cuadrícula. El JS base de Odoo puede emitir `get_combination_info`.
 
 ## Nota sobre tarifas configuradas
-- Solo aplica a sitios cuyo `website.company_id.country_id.code` sea `MX`.
+- No filtra por país: funciona con cualquier `website` que tenga listas `Menudeo` y `Mayoreo` válidas para el sitio y su empresa.
 - Deben existir listas `Menudeo` y `Mayoreo` para ese website/empresa.
 - Se usa el mínimo de 12 piezas sumando todas las líneas de producto, excluyendo transporte y líneas de presentación. La conversión de unidad se realiza con `_compute_quantity`.
 - No modifica pedidos confirmados.

@@ -1,7 +1,7 @@
 {
     "name": "Yazbek - Matriz de variantes por lotes",
     "summary": "Matriz eCommerce por lotes, tarifas y modalidades de compra por sitio",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.2.1",
     "category": "Website/Website",
     "author": "Yazbek",
     "license": "LGPL-3",

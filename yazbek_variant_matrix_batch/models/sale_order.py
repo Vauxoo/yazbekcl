@@ -1,4 +1,4 @@
-"""Tarifa uniforme del carrito de Yazbek México (Odoo 19).
+"""Tarifa uniforme del carrito web de Yazbek (Odoo 19).
 
 Odoo 19 llama _verify_cart_after_update al terminar de agregar productos
 (incluso linked/combo) y al modificar o quitar una línea en /shop/cart/update.
@@ -20,14 +20,13 @@ _logger = logging.getLogger(__name__)
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
-    def _yazbek_sync_mx_cart_pricelist(self):
+    def _yazbek_sync_cart_pricelist(self):
         self.ensure_one()
         website = self.website_id
         if not website or self.state not in ("draft", "sent"):
             return
-        # Evitar modificar Chile. La empresa del sitio debe ser mexicana.
-        if website.company_id.country_id.code != "MX":
-            return
+        # Aplicable a cualquier pais. Cada sitio utiliza sus propias tarifas
+        # Menudeo/Mayoreo, si existen y corresponden a su empresa.
         # Mantener exactamente la tarifa especial de clientes Yazbek.
         special_names = {"descuento 14%", "descuento 14% (clp)"}
         current_name = (self.pricelist_id.name or "").strip().lower()
@@ -82,5 +81,5 @@ class SaleOrder(models.Model):
         # Super verificará el envío después de aplicar la tarifa final.
         for order in self:
             if not order.env.context.get("yazbek_skip_pricelist_sync"):
-                order.with_context(yazbek_skip_pricelist_sync=True)._yazbek_sync_mx_cart_pricelist()
+                order.with_context(yazbek_skip_pricelist_sync=True)._yazbek_sync_cart_pricelist()
         return super()._verify_cart_after_update()
